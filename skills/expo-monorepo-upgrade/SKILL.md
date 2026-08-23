@@ -39,6 +39,17 @@ Before a run, read:
   migrate, update, or replan an existing run against changed YAML.
 - Do not support legacy command/pipeline or per-app contract formats.
 
+## Session placement
+
+- Start and keep the main orchestrator in the direct parent directory of the
+  repository being upgraded. Resolve the target repository as an explicit child
+  path; do not start or move the main orchestrator into it, so repository-local
+  skills and instructions do not enter the main decision context.
+- Create every dispatched child-agent session with the target repository root as
+  its initial working directory so repository-local skills and instructions load
+  for that agent. Set the working directory when creating the session; starting
+  elsewhere and changing directory afterward is not equivalent.
+
 ## Workflow
 
 When invoked with `--test-run`, follow every stage below except step 3 (Repository bump), and do not require bump success to finish.
