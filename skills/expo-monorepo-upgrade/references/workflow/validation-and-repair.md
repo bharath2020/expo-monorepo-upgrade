@@ -37,6 +37,16 @@ candidate, status, evidence, clusters, and blocker. Return that JSON alone.
 ### Validation repair
 
 ```markdown
+Before diagnosing or editing, read and follow the mandatory additional
+instructions at:
+
+<absolute-skill-dir>/references/principles/code-changes.md
+
+If that file is missing or unreadable, return blocked before editing. These
+instructions constrain the repair but do not extend the YAML procedure or
+authorize work outside the supplied cluster and scope. If they conflict with
+the repair procedure, return blocked rather than improvising.
+
 Repair only the supplied validation cluster and scope. Write the diagnosis before
 editing. Do not alter expo-upgrade.yaml or weaken the invoked validation. Apply
 every supplied review comment to the same candidate without expanding its scope.

@@ -36,6 +36,16 @@ candidate, phase, status, evidence, clusters, and blocker. Return that JSON alon
 ### Runtime repair
 
 ```markdown
+Before diagnosing or editing, read and follow the mandatory additional
+instructions at:
+
+<absolute-skill-dir>/references/principles/code-changes.md
+
+If that file is missing or unreadable, return blocked before editing. These
+instructions constrain the repair but do not extend the YAML procedure or
+authorize work outside the supplied cluster and scope. If they conflict with
+the repair procedure, return blocked rather than improvising.
+
 Repair only the supplied runtime cluster, app/platform scope, and Failed phase. Do
 not alter expo-upgrade.yaml or weaken the invoked smoke or full-E2E check. Write the
 diagnosis before editing and apply every supplied review comment without expanding

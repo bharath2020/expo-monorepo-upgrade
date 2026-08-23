@@ -27,7 +27,11 @@ brief as a bounded control-plane task. There is no special renderer-worker subty
    [harness and model selection](harness-and-model-selection.md).
 6. Append the common envelope below, then the one stage prompt supplied by the
    active workflow.
-7. Write the complete brief to
+7. Resolve `<absolute-skill-dir>` to the literal absolute skill directory before
+   writing and hashing the brief. Verify every mandatory instruction reference is
+   an existing readable file, and reject the render if a reference remains
+   unresolved.
+8. Write the complete brief to
    `reports/<run-id>/prompts/<unit-id>/attempt-<n>/dispatch-<m>.md`. Hash the full
    brief as `brief_sha256`, omitting only its own hash line, and store its path and
    both hashes in state before dispatch.
