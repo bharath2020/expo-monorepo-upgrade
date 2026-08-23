@@ -57,6 +57,7 @@ Use `schema_version: 1` and these top-level fields:
 | `active_candidate` | Sole uncommitted bump or repair candidate, owner, snapshot, hash, and files |
 | `locks` | Active resource lock to unit or dispatcher id |
 | `in_flight` | Agent handle, process evidence, heartbeat, brief, and verdict paths |
+| `herdr` | Workspace, tab, orchestrator pane, two-row worker-grid pane ids, and next slot; live child agents remain in `in_flight` |
 | `checkpoints` | Ordered verified commits and checkpoint-worker evidence |
 | `decisions`, `open_questions` | Durable human and orchestration decisions |
 | `started_at`, `updated_at` | UTC timestamps |
