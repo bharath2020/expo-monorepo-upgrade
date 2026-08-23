@@ -1,277 +1,421 @@
 #!/usr/bin/env node
-// Validates the expo-upgrade.yaml contract family and prints what the run needs from it.
-// Uses the repo's own `yaml`/`js-yaml` when one resolves, else a built-in block-YAML reader.
-//
-// Prints one JSON object on stdout: { ok, errors[], warnings[], apps[], gates[], prep[], bump }.
-// Exit 0 when the contract is usable (warnings allowed), 1 when an error blocks the run.
-//
-// Usage: node skills/expo-monorepo-upgrade/scripts/check-contract.mjs [repo-root]
-import { readFileSync, existsSync, statSync, readdirSync } from 'node:fs';
-import { join, dirname } from 'node:path';
+
+// Validate the prompt-native expo-upgrade.yaml contract and print a normalized plan.
+// Uses yaml/js-yaml from the target repository when available, with a small parser
+// for the block-style subset emitted by expo-upgrade-setup.
+
+import { existsSync, readFileSync, realpathSync, statSync } from 'node:fs';
 import { createRequire } from 'node:module';
+import { isAbsolute, join, posix, relative, resolve, sep } from 'node:path';
 
-const root = process.argv[2] ?? process.cwd();
-const errors = [], warnings = [];
-const err = (where, msg) => errors.push(`${where}: ${msg}`);
-const warn = (where, msg) => warnings.push(`${where}: ${msg}`);
+const root = resolve(process.argv[2] ?? process.cwd());
+const contractPath = join(root, 'expo-upgrade.yaml');
+const errors = [];
+const warnings = [];
+const procedures = [];
+const error = (where, message) => errors.push(`${where}: ${message}`);
+const warning = (where, message) => warnings.push(`${where}: ${message}`);
 
-// --- YAML ------------------------------------------------------------------
 const loadYaml = (() => {
-  for (const [pkg, fn] of [['yaml', m => s => m.parse(s)], ['js-yaml', m => s => m.load(s)]]) {
-    try { return fn(createRequire(join(root, 'package.json'))(pkg)); } catch { /* not installed */ }
+  const requireFromRepo = createRequire(join(root, 'package.json'));
+  for (const [name, adapt] of [
+    ['yaml', module => text => module.parse(text)],
+    ['js-yaml', module => text => module.load(text)],
+  ]) {
+    try {
+      return adapt(requireFromRepo(name));
+    } catch {
+      // Fall through to the dependency-free contract subset.
+    }
   }
   return miniYaml;
 })();
 
-// Block-style subset the setup skill writes: nested maps, `- ` lists, `|` blocks, [a, b] seqs.
 function miniYaml(text) {
   const lines = text.split(/\r?\n/);
-  let i = 0;
-  const live = n => n < lines.length && lines[n].trim() !== '' && !/^\s*#/.test(lines[n]);
-  const nextLive = () => { while (i < lines.length && !live(i)) i++; return i < lines.length; };
-  const indentOf = s => s.match(/^ */)[0].length;
-  const strip = s => {
-    let out = '', q = null;
-    for (let k = 0; k < s.length; k++) {
-      const c = s[k];
-      if (q) { out += c; if (c === q) q = null; continue; }
-      if (c === '"' || c === "'") { q = c; out += c; continue; }
-      if (c === '#' && (k === 0 || /\s/.test(s[k - 1]))) break;
-      out += c;
+  let cursor = 0;
+  const indentOf = line => line.match(/^ */)[0].length;
+  const isLive = index => index < lines.length
+    && lines[index].trim() !== ''
+    && !/^\s*#/.test(lines[index]);
+  const nextLive = () => {
+    while (cursor < lines.length && !isLive(cursor)) cursor += 1;
+    return cursor < lines.length;
+  };
+  const stripComment = value => {
+    let output = '';
+    let quote = null;
+    for (let index = 0; index < value.length; index += 1) {
+      const character = value[index];
+      if (quote) {
+        output += character;
+        if (character === quote && value[index - 1] !== '\\') quote = null;
+        continue;
+      }
+      if (character === '"' || character === "'") {
+        quote = character;
+        output += character;
+        continue;
+      }
+      if (character === '#' && (index === 0 || /\s/.test(value[index - 1]))) break;
+      output += character;
     }
-    return out.trimEnd();
+    return output.trimEnd();
   };
   const scalar = raw => {
-    const v = raw.trim();
-    if (v === '') return null;
-    if (v === 'null' || v === '~') return null;
-    if (v === 'true' || v === 'false') return v === 'true';
-    if (/^-?\d+(\.\d+)?$/.test(v)) return Number(v);
-    if (/^\[.*\]$/.test(v)) return v.slice(1, -1).split(',').map(s => scalar(s)).filter(s => s !== null);
-    if (/^".*"$/.test(v) || /^'.*'$/.test(v)) return v.slice(1, -1);
-    return v;
+    const value = raw.trim();
+    if (value === '' || value === 'null' || value === '~') return null;
+    if (value === 'true' || value === 'false') return value === 'true';
+    if (/^-?\d+(?:\.\d+)?$/.test(value)) return Number(value);
+    if ((value.startsWith('"') && value.endsWith('"'))
+      || (value.startsWith("'") && value.endsWith("'"))) {
+      return value.slice(1, -1);
+    }
+    return value;
   };
   const blockScalar = keyIndent => {
-    const buf = [];
-    let base = null;
-    while (i < lines.length) {
-      const raw = lines[i];
-      if (raw.trim() === '') { buf.push(''); i++; continue; }
-      const ind = indentOf(raw);
-      if (ind <= keyIndent) break;
-      base ??= ind;
-      buf.push(raw.slice(base));
-      i++;
+    const output = [];
+    let contentIndent = null;
+    while (cursor < lines.length) {
+      const line = lines[cursor];
+      if (line.trim() === '') {
+        output.push('');
+        cursor += 1;
+        continue;
+      }
+      const indent = indentOf(line);
+      if (indent <= keyIndent) break;
+      contentIndent ??= indent;
+      output.push(line.slice(contentIndent));
+      cursor += 1;
     }
-    return buf.join('\n').replace(/\n+$/, '') + '\n';
+    return `${output.join('\n').replace(/\n+$/, '')}\n`;
   };
   function block(indent) {
-    let map = null, list = null;
+    let map = null;
+    let list = null;
     while (nextLive()) {
-      const raw = lines[i];
-      const ind = indentOf(raw);
-      if (ind < indent) break;
-      const line = strip(raw.trim());
+      const raw = lines[cursor];
+      const currentIndent = indentOf(raw);
+      if (currentIndent < indent) break;
+      const line = stripComment(raw.trim());
       if (line.startsWith('- ')) {
-        if (ind !== indent) break;
+        if (currentIndent !== indent) break;
         list ??= [];
         const rest = line.slice(2);
         if (/^[^:]+:/.test(rest)) {
-          lines[i] = ' '.repeat(indent + 2) + rest;      // fold "- k: v" into a map at indent+2
+          lines[cursor] = `${' '.repeat(indent + 2)}${rest}`;
           list.push(block(indent + 2));
-        } else { list.push(scalar(rest)); i++; }
+        } else {
+          list.push(scalar(rest));
+          cursor += 1;
+        }
         continue;
       }
-      if (ind !== indent) break;
-      const m = line.match(/^("[^"]+"|'[^']+'|[^:]+):\s*(.*)$/);
-      if (!m) throw new Error(`cannot parse line ${i + 1}: ${lines[i].trim()}`);
-      const key = scalar(m[1]), rest = m[2].trim();
+      if (currentIndent !== indent) break;
+      const match = line.match(/^("[^"]+"|'[^']+'|[^:]+):\s*(.*)$/);
+      if (!match) throw new Error(`cannot parse line ${cursor + 1}: ${raw.trim()}`);
+      const key = scalar(match[1]);
+      const rest = match[2].trim();
       map ??= {};
-      i++;
-      if (rest === '|' || rest === '|-' || rest === '>' || rest === '>-') map[key] = blockScalar(ind);
-      else if (rest === '') {
-        const save = i;
-        map[key] = nextLive() && indentOf(lines[i]) > ind ? block(indentOf(lines[i])) : null;
-        if (map[key] === null) i = save;
-      } else map[key] = scalar(rest);
+      cursor += 1;
+      if (['|', '|-', '>', '>-'].includes(rest)) {
+        map[key] = blockScalar(currentIndent);
+      } else if (rest === '') {
+        const savedCursor = cursor;
+        map[key] = nextLive() && indentOf(lines[cursor]) > currentIndent
+          ? block(indentOf(lines[cursor]))
+          : null;
+        if (map[key] === null) cursor = savedCursor;
+      } else {
+        map[key] = scalar(rest);
+      }
     }
     return list ?? map ?? {};
   }
   return block(0);
 }
 
-const readYaml = (path, where) => {
-  try { return loadYaml(readFileSync(path, 'utf8')); }
-  catch (e) { err(where, `cannot parse — ${e.message}`); return null; }
+function readContract() {
+  try {
+    return loadYaml(readFileSync(contractPath, 'utf8'));
+  } catch (cause) {
+    error('expo-upgrade.yaml', `cannot parse - ${cause.message}`);
+    return null;
+  }
+}
+
+function isMap(value) {
+  return value !== null && typeof value === 'object' && !Array.isArray(value);
+}
+
+function exactKeys(value, allowed, where) {
+  if (!isMap(value)) {
+    error(where, 'must be a map');
+    return false;
+  }
+  for (const key of Object.keys(value)) {
+    if (!allowed.includes(key)) error(where, `unknown key \`${key}\``);
+  }
+  return true;
+}
+
+function rejectExplicitNulls(value, keys, where) {
+  for (const key of keys) {
+    if (Object.prototype.hasOwnProperty.call(value, key) && value[key] == null) {
+      error(`${where}.${key}`, 'optional entries must be omitted rather than set to null');
+    }
+  }
+}
+
+const INPUTS = {
+  bump: ['target_sdk'],
+  validation: [],
+  repair_validation: ['cluster_summary', 'failure_evidence'],
+  smoke: [],
+  full_e2e: [],
+  repair_smoke_e2e: ['failed_phase', 'cluster_summary', 'failure_evidence'],
 };
 
-// --- entry shapes ----------------------------------------------------------
-const GATE_KEYS = ['expect', 'flow_selector', 'timeout_s', 'concurrency_groups'];
-const ENTRY_KEYS = { command: ['value'], prompt: ['value'], pipeline: ['trigger', 'status', 'logs'] };
-
-function checkEntry(entry, where, allowed, isGate) {
-  if (entry === null || typeof entry !== 'object' || Array.isArray(entry)) {
-    err(where, 'is not an entry (needs `kind:` and its fields)'); return null;
-  }
-  const kind = entry.kind;
-  if (!kind) { err(where, 'has no `kind`'); return null; }
-  if (!allowed.includes(kind)) {
-    warn(where, `kind \`${kind}\` — this section takes ${allowed.join(' or ')}; entry ignored`); return null;
-  }
-  for (const f of ENTRY_KEYS[kind] ?? []) if (!entry[f]) err(where, `kind \`${kind}\` needs \`${f}\``);
-  const known = ['kind', ...ENTRY_KEYS[kind] ?? [], 'poll_s', ...(isGate ? GATE_KEYS : [])];
-  for (const k of Object.keys(entry)) if (!known.includes(k)) warn(where, `unknown key \`${k}\` — ignored`);
-  if (isGate) {
-    if (entry.timeout_s != null && typeof entry.timeout_s !== 'number') err(where, '`timeout_s` must be a number');
-    if (entry.concurrency_groups != null && !Array.isArray(entry.concurrency_groups))
-      err(where, '`concurrency_groups` must be a list');
-    if (entry.flow_selector != null) {
-      const sel = checkEntry(entry.flow_selector, `${where} → flow_selector`, ['command', 'prompt']);
-      if (sel && !`${sel.value ?? ''}`.includes('<flow>'))
-        err(`${where} → flow_selector`, 'must contain the `<flow>` placeholder');
+function checkProcedure(entry, where, kind, scope) {
+  if (!exactKeys(entry, ['description', 'prompt'], where)) return null;
+  for (const key of ['description', 'prompt']) {
+    if (typeof entry[key] !== 'string' || entry[key].trim() === '') {
+      error(where, `\`${key}\` must be a non-empty string`);
     }
   }
-  const text = [entry.value, entry.trigger, entry.status, entry.logs].filter(Boolean).join('\n');
-  // The run fills exactly three placeholders; anything else would reach a shell unsubstituted.
-  const fillable = where.endsWith('bump') ? ['target']
-    : where.endsWith('flow_selector') ? ['flow']
-    : kind === 'pipeline' ? ['id'] : [];
-  for (const [tok, name] of [...text.matchAll(/(?<!\$)\{([a-z_]+)\}/g), ...text.matchAll(/<([a-z_]+)>/g)]
-      .map(m => [m[0], m[1]])) {
-    if (fillable.includes(name)) continue;
-    const known = ['target', 'flow', 'id'].includes(name);
-    err(where, known
-      ? `\`${tok}\` is not filled here — the run fills {target} in bump, {id} in a pipeline's status/logs, and <flow> in flow_selector`
-      : `\`${tok}\` is a placeholder nothing fills — inline the value, or use \`kind: prompt\` so a worker can settle it`);
+  if (typeof entry.description === 'string' && /[\r\n]/.test(entry.description.trim())) {
+    error(where, '`description` must fit on one YAML line');
   }
-  return { kind, ...entry };
-}
 
-// --- root ------------------------------------------------------------------
-const rootPath = join(root, 'expo-upgrade.yaml');
-if (!existsSync(rootPath)) {
-  err('expo-upgrade.yaml', 'missing — run the expo-monorepo-upgrade-setup skill');
-  console.log(JSON.stringify({
-    ok: false, errors, warnings,
-    summary: 'no contract at the repo root; this repo is not set up for an upgrade',
-    apps: [], gates: [], prep: [], bump: null,
-  }, null, 2));
-  process.exit(1);
-}
-const rootDoc = readYaml(rootPath, 'expo-upgrade.yaml') ?? {};
-const prep = [], gates = [], appsOut = [];
-
-if (rootDoc.version == null) err('expo-upgrade.yaml', 'missing `version`');
-if (!rootDoc.setup?.install) err('expo-upgrade.yaml', 'missing `setup.install`');
-else if (checkEntry(rootDoc.setup.install, 'setup.install', ['command', 'prompt']))
-  prep.push({ name: 'setup.install', path: '.', ...rootDoc.setup.install });
-
-if (!rootDoc.bump) err('expo-upgrade.yaml', 'missing `bump` — the run has no way to move this repo to the target SDK');
-const bump = rootDoc.bump ? checkEntry(rootDoc.bump, 'bump', ['command', 'prompt']) : null;
-if (bump && !`${bump.value ?? ''}`.includes('{target}'))
-  warn('bump', 'no `{target}` placeholder — the same SDK version will be installed on every run');
-for (const [plat, group] of Object.entries(rootDoc.tools ?? {}))
-  for (const [name, entry] of Object.entries(group ?? {}))
-    if (checkEntry(entry, `tools.${plat}.${name}`, ['command', 'prompt']))
-      prep.push({ name: `tools.${plat}.${name}`, path: '.', platform: plat, ...entry });
-
-for (const k of Object.keys(rootDoc)) if (!['version', 'setup', 'bump', 'tools', 'apps'].includes(k))
-  warn('expo-upgrade.yaml', `unknown key \`${k}\` — ignored`);
-
-if (!Array.isArray(rootDoc.apps) || rootDoc.apps.length === 0) err('expo-upgrade.yaml', 'missing the `apps:` index');
-
-// --- per app ---------------------------------------------------------------
-const SINGLE_GATES = { typecheck: 'T0', lint: 'T0', smoke: 'T2', e2e: 'T3' };
-const KEYED_GATES = { build: 'T1', test: 'T1' };
-const SINGLE_PREP = ['install', 'clean', 'metro', 'environment'];
-
-for (const idx of rootDoc.apps ?? []) {
-  const file = idx?.file;
-  if (!file) { err('apps[]', `entry ${JSON.stringify(idx)} has no \`file\``); continue; }
-  const where = file;
-  if (!existsSync(join(root, file))) { err(where, 'file named in the index does not exist'); continue; }
-  const app = readYaml(join(root, file), where);
-  if (!app) continue;
-
-  for (const k of ['name', 'path', 'platforms']) if (app[k] == null) err(where, `missing \`${k}\``);
-  const platforms = Array.isArray(app.platforms) ? app.platforms : [];
-  if (app.platforms != null && platforms.length === 0) err(where, '`platforms` must be a non-empty list');
-  if (app.path != null && !existsSync(join(root, app.path))) err(where, `\`path\` ${app.path} does not exist`);
-  if (app.name && idx.name && app.name !== idx.name)
-    warn(where, `\`name\` ${app.name} differs from the index's ${idx.name}`);
-
-  const appPath = app.path ?? dirname(file);
-  const push = (id, tier, plats, entry) =>
-    gates.push({ id, app: app.name, tier, platforms: plats, path: appPath, ...entry });
-
-  for (const [sec, tier] of Object.entries(SINGLE_GATES)) {
-    if (app[sec] == null) continue;
-    const e = checkEntry(app[sec], `${where} → ${sec}`, ['command', 'pipeline'], true);
-    if (!e) continue;
-    if ((tier === 'T2' || tier === 'T3') && !e.flow_selector)
-      warn(`${where} → ${sec}`, 'no `flow_selector` — a failed flow replays the whole suite on every flake screen and post-fix re-run; harmless only if this suite is a single flow');
-    push(sec, tier, tier === 'T2' || tier === 'T3' ? platforms : ['*'], e);
+  const prompt = typeof entry.prompt === 'string' ? entry.prompt : '';
+  const setupTokens = [...prompt.matchAll(/\[\[([^\]]+)\]\]/g)].map(match => match[1]);
+  if (setupTokens.length > 0) {
+    error(where, `unresolved setup token(s): ${[...new Set(setupTokens)].join(', ')}`);
   }
-  for (const [sec, tier] of Object.entries(KEYED_GATES)) {
-    for (const [key, entry] of Object.entries(app[sec] ?? {})) {
-      const e = checkEntry(entry, `${where} → ${sec}.${key}`, ['command', 'pipeline'], true);
-      if (!e) continue;
-      if (sec === 'build' && !platforms.includes(key))
-        warn(where, `\`build.${key}\` names a platform not in \`platforms\``);
-      push(`${sec}.${key}`, tier, sec === 'build' ? [key] : ['*'], e);
+
+  const tokenMatches = [...prompt.matchAll(/\{\{\s*([a-z][a-z0-9_]*)\s*\}\}/g)];
+  const tokenNames = tokenMatches.map(match => match[1]);
+  const allowedInputs = INPUTS[kind];
+  for (const token of new Set(tokenNames)) {
+    if (!allowedInputs.includes(token)) {
+      error(where, `runtime input \`{{${token}}}\` is not allowed for ${kind}`);
     }
   }
-  for (const sec of SINGLE_PREP) {
-    if (app[sec] == null) continue;
-    const e = checkEntry(app[sec], `${where} → ${sec}`, ['command', 'prompt']);
-    if (e) prep.push({ name: `${app.name}.${sec}`, app: app.name, path: appPath, ...e });
+  for (const required of allowedInputs) {
+    if (!tokenNames.includes(required)) {
+      error(where, `prompt is missing required runtime input \`{{${required}}}\``);
+    }
   }
-  for (const [plat, entry] of Object.entries(app.run ?? {})) {
-    const e = checkEntry(entry, `${where} → run.${plat}`, ['command', 'prompt']);
-    if (e) prep.push({ name: `${app.name}.run.${plat}`, app: app.name, path: appPath, platform: plat, ...e });
+  const stripped = prompt
+    .replace(/\{\{\s*[a-z][a-z0-9_]*\s*\}\}/g, '')
+    .replace(/\[\[[^\]]+\]\]/g, '');
+  if (stripped.includes('{{') || stripped.includes('}}')
+    || stripped.includes('[[') || stripped.includes(']]')) {
+    error(where, 'contains a malformed runtime or setup token');
   }
-  const knownApp = ['name', 'path', 'platforms', 'run', ...Object.keys(SINGLE_GATES), ...Object.keys(KEYED_GATES), ...SINGLE_PREP];
-  for (const k of Object.keys(app)) if (!knownApp.includes(k)) warn(where, `unknown key \`${k}\` — ignored`);
+  const lines = prompt.split(/\r?\n/).map(line => line.trim());
+  for (const match of tokenMatches) {
+    if (!lines.includes(match[0].trim())) {
+      error(where, `runtime input \`${match[0]}\` must be on its own line`);
+    }
+  }
+  lines.forEach((line, index) => {
+    if (!/^\{\{\s*[a-z][a-z0-9_]*\s*\}\}$/.test(line)) return;
+    let previous = index - 1;
+    while (previous >= 0 && lines[previous] === '') previous -= 1;
+    if (previous < 0 || !lines[previous].endsWith(':')) {
+      error(where, `runtime input \`${line}\` must follow a label ending in \`:\``);
+    }
+  });
 
-  appsOut.push({ name: app.name, path: appPath, platforms, file });
+  const normalized = {
+    ref: where,
+    kind,
+    description: entry.description,
+    prompt: entry.prompt,
+    runtime_inputs: [...new Set(tokenNames)],
+    ...scope,
+  };
+  procedures.push(normalized);
+  return normalized;
 }
 
-// --- index vs tree ---------------------------------------------------------
-const expand = pattern => {
-  const parts = pattern.split('/');
-  let dirs = [''];
-  for (const part of parts) {
-    const next = [];
-    for (const d of dirs) {
-      const abs = join(root, d);
-      if (!existsSync(abs) || !statSync(abs).isDirectory()) continue;
-      if (part === '*') next.push(...readdirSync(abs).filter(n => !n.startsWith('.') &&
-        statSync(join(abs, n)).isDirectory()).map(n => join(d, n)));
-      else if (existsSync(join(abs, part))) next.push(join(d, part));
+function checkAppPath(value, where) {
+  if (typeof value !== 'string' || value.trim() === '') {
+    error(where, 'must be a non-empty repository-relative POSIX path');
+    return null;
+  }
+  if (value.includes('\\') || isAbsolute(value) || posix.isAbsolute(value)) {
+    error(where, 'must be a repository-relative POSIX path');
+    return null;
+  }
+  const normalized = posix.normalize(value);
+  if (normalized === '..' || normalized.startsWith('../')) {
+    error(where, 'must stay inside the repository root');
+    return null;
+  }
+  const absolute = resolve(root, normalized);
+  const outside = relative(root, absolute);
+  if (outside === '..' || outside.startsWith(`..${sep}`) || isAbsolute(outside)) {
+    error(where, 'must stay inside the repository root');
+    return null;
+  }
+  if (!existsSync(absolute) || !statSync(absolute).isDirectory()) {
+    error(where, `path \`${value}\` does not exist as a directory`);
+    return null;
+  }
+  try {
+    const realRoot = realpathSync(root);
+    const realApp = realpathSync(absolute);
+    const realOutside = relative(realRoot, realApp);
+    if (realOutside === '..' || realOutside.startsWith(`..${sep}`) || isAbsolute(realOutside)) {
+      error(where, `path \`${value}\` resolves outside the repository root`);
+      return null;
     }
-    dirs = next;
+  } catch (cause) {
+    error(where, `cannot resolve path \`${value}\` - ${cause.message}`);
+    return null;
   }
-  return dirs;
-};
-try {
-  const pkg = JSON.parse(readFileSync(join(root, 'package.json'), 'utf8'));
-  const globs = Array.isArray(pkg.workspaces) ? pkg.workspaces : pkg.workspaces?.packages ?? [];
-  const indexed = new Set(appsOut.flatMap(a => [a.path, dirname(a.file)].map(p => p.replace(/^\.\//, ''))));
-  for (const g of globs) for (const dir of expand(g)) {
-    const man = join(root, dir, 'package.json');
-    if (!existsSync(man)) continue;
-    const m = JSON.parse(readFileSync(man, 'utf8'));
-    const isExpo = m.dependencies?.expo || m.devDependencies?.expo;
-    if (isExpo && !indexed.has(dir))
-      warn('apps[]', `${dir} depends on expo but is not in the index — re-run the setup skill; it stays out of this run`);
-  }
-} catch { /* no root manifest to compare against */ }
+  return normalized;
+}
 
-const byTier = t => gates.filter(g => g.tier === t).length;
-const ok = errors.length === 0;
-console.log(JSON.stringify({
-  ok, errors, warnings,
-  summary: `${appsOut.length} app(s), ${gates.length} gate(s) (${['T0','T1','T2','T3'].map(t => `${byTier(t)} ${t}`).join(', ')}), ${prep.length} preparation entr(ies), ${errors.length} error(s), ${warnings.length} warning(s)`,
-  apps: appsOut, gates, prep, bump,
-}, null, 2));
-process.exit(ok ? 0 : 1);
+function checkCompanion(container, procedure, repair, where) {
+  if (container[procedure] != null && container[repair] == null) {
+    error(where, `\`${procedure}\` requires matching \`${repair}\``);
+  }
+  if (container[repair] != null && container[procedure] == null) {
+    error(where, `\`${repair}\` has no matching \`${procedure}\``);
+  }
+}
+
+function finish(apps, bump) {
+  const ok = errors.length === 0;
+  const byKind = Object.fromEntries(Object.keys(INPUTS).map(kind => [
+    kind,
+    procedures.filter(procedure => procedure.kind === kind).length,
+  ]));
+  const result = {
+    schema_version: 1,
+    ok,
+    contract_path: contractPath,
+    errors,
+    warnings,
+    summary: `${apps.length} app(s), ${procedures.length} procedure(s), ${errors.length} error(s), ${warnings.length} warning(s)`,
+    bump,
+    apps,
+    procedures,
+    counts: byKind,
+  };
+  process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
+  process.exitCode = ok ? 0 : 1;
+}
+
+if (!existsSync(contractPath)) {
+  error('expo-upgrade.yaml', 'missing at repository root; run expo-upgrade-setup');
+  finish([], null);
+} else {
+  const document = readContract();
+  const apps = [];
+  let bump = null;
+  if (!isMap(document)) {
+    if (document !== null) error('expo-upgrade.yaml', 'root must be a map');
+  } else {
+    exactKeys(document, ['bump', 'apps'], 'expo-upgrade.yaml');
+    if (document.bump == null) {
+      error('expo-upgrade.yaml', 'missing required `bump` procedure');
+    } else {
+      bump = checkProcedure(document.bump, 'bump', 'bump', {
+        app_path: null,
+        platform: null,
+      });
+    }
+    if (!Array.isArray(document.apps) || document.apps.length === 0) {
+      error('expo-upgrade.yaml', '`apps` must be a non-empty list');
+    } else {
+      const seenPaths = new Set();
+      document.apps.forEach((app, appIndex) => {
+        const where = `apps[${appIndex}]`;
+        if (!exactKeys(app, ['path', 'validation', 'repair_validation', 'platforms'], where)) return;
+        rejectExplicitNulls(app, ['validation', 'repair_validation', 'platforms'], where);
+        const appPath = checkAppPath(app.path, `${where}.path`);
+        if (appPath !== null) {
+          if (seenPaths.has(appPath)) error(`${where}.path`, `duplicate app path \`${appPath}\``);
+          seenPaths.add(appPath);
+        }
+        checkCompanion(app, 'validation', 'repair_validation', where);
+        const scope = { app_path: appPath, platform: null };
+        const normalized = {
+          index: appIndex,
+          path: appPath,
+          validation: app.validation == null
+            ? null
+            : checkProcedure(app.validation, `${where}.validation`, 'validation', scope),
+          repair_validation: app.repair_validation == null
+            ? null
+            : checkProcedure(app.repair_validation, `${where}.repair_validation`, 'repair_validation', scope),
+          platforms: {},
+        };
+
+        if (app.platforms != null) {
+          if (!isMap(app.platforms)) {
+            error(`${where}.platforms`, 'must be a map');
+          } else if (Object.keys(app.platforms).length === 0) {
+            error(`${where}.platforms`, 'empty platform maps must be omitted');
+          } else {
+            for (const [platform, config] of Object.entries(app.platforms)) {
+              const platformWhere = `${where}.platforms.${platform}`;
+              if (!/^[A-Za-z0-9._-]+$/.test(platform)) {
+                error(`${where}.platforms`, `invalid platform key \`${platform}\``);
+                continue;
+              }
+              if (!exactKeys(config, [
+                'validation',
+                'repair_validation',
+                'smoke',
+                'full_e2e',
+                'repair_smoke_e2e',
+              ], platformWhere)) continue;
+              rejectExplicitNulls(config, [
+                'validation',
+                'repair_validation',
+                'smoke',
+                'full_e2e',
+                'repair_smoke_e2e',
+              ], platformWhere);
+              if (Object.keys(config).length === 0) {
+                error(platformWhere, 'empty platform entries must be omitted');
+              }
+              checkCompanion(config, 'validation', 'repair_validation', platformWhere);
+              const hasRuntime = config.smoke != null || config.full_e2e != null;
+              if (hasRuntime && config.repair_smoke_e2e == null) {
+                error(platformWhere, '`smoke` or `full_e2e` requires `repair_smoke_e2e`');
+              }
+              if (!hasRuntime && config.repair_smoke_e2e != null) {
+                error(platformWhere, '`repair_smoke_e2e` requires `smoke` or `full_e2e`');
+              }
+              const platformScope = { app_path: appPath, platform };
+              normalized.platforms[platform] = {};
+              for (const kind of [
+                'validation',
+                'repair_validation',
+                'smoke',
+                'full_e2e',
+                'repair_smoke_e2e',
+              ]) {
+                normalized.platforms[platform][kind] = config[kind] == null
+                  ? null
+                  : checkProcedure(config[kind], `${platformWhere}.${kind}`, kind, platformScope);
+              }
+            }
+          }
+        }
+        if (normalized.validation == null && Object.keys(normalized.platforms).length === 0) {
+          warning(where, 'app has no configured validation or platform procedure; only the repository bump covers it');
+        }
+        apps.push(normalized);
+      });
+    }
+  }
+  finish(apps, bump);
+}

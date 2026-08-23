@@ -1,52 +1,77 @@
 ---
 name: expo-monorepo-upgrade
-description: Upgrade the Expo SDK across a monorepo of React Native apps, validating through tiered gates. Reads the expo-upgrade.yaml contract the expo-monorepo-upgrade-setup skill writes. Use when asked to upgrade Expo SDK, bump the Expo version, or migrate a monorepo to a new SDK. Args: [target-sdk].
+description: "Orchestrate an Expo SDK upgrade from the repository's prompt-native expo-upgrade.yaml contract. Use when asked to run, resume, or report an Expo monorepo upgrade. Args: [target-sdk]."
 ---
 
-# expo-monorepo-upgrade
+# Expo monorepo upgrade
 
-Dispatch workers, read their verdicts, decide the next step. Read
-`references/principles.md` and `references/orchestration-model.md` first and
-hold both for the whole run.
+Execute the repository's upgrade procedures; do not design them. The root
+`expo-upgrade.yaml` is the sole authority for repository-specific commands,
+prerequisites, validation, and repair. This skill owns only orchestration.
 
-Each step below names what it settles and what it leaves behind; its file
-holds how.
+Before a run, read:
+
+- [YAML contract](references/yaml-contract.md) for accepted procedures and inputs;
+- [orchestrator principles](references/principles/orchestrator.md) for ownership;
+- [execution model](references/execution-model.md) for units, locks, audits, and
+  terminal states;
+- [general prompt rendering](references/general-prompt-rendering.md) for the shared
+  prompt envelope, identity hashes, deadlines, and transport recovery;
+- [run state](references/run-state.md) for persistence, resume, and recovery.
+
+## Boundary
+
+- The main orchestrator only chooses the next bounded task and dispatches an agent.
+  It never inspects or changes repository source, runs a procedure, reviews a
+  candidate, manages Git, writes reports, or mutates queue or run state. Delegate
+  any required control-plane write to a fresh generic worker with explicit inputs,
+  allowed paths, and expected outputs.
+- Dispatch repository work only from the validated contract snapshot. Never infer
+  a missing command, build, test, repair, cleanup, or fallback from repository
+  files.
+- A missing optional YAML entry means no procedure exists for that scope.
+- Use [general prompt rendering](references/general-prompt-rendering.md) for every
+  general prompt guideline and every rendered brief. That reference owns the
+  common envelope and rendering mechanics; the applicable workflow reference owns
+  the one stage prompt appended to it.
+- Contract setup or correction belongs to `expo-monorepo-upgrade-setup`, outside
+  this skill. Treat every edited contract as a fresh copy for a new run. Never
+  migrate, update, or replan an existing run against changed YAML.
+- Do not support legacy command/pipeline or per-app contract formats.
 
 ## Workflow
 
-1. **Setup** — open the run and prove it can start.
-   Leaves: `reports/<run-id>/` with its ledger, the preflight checklist printed, preconditions answered. No root `expo-upgrade.yaml` refuses the run and points at the `expo-monorepo-upgrade-setup` skill; no Expo app declines it.
-   `references/setup.md`, `references/schemas/ledger.md`.
-2. **Discovery** — settle what to run and which SDK to run at.
-   Leaves: `target` in the ledger, the validated contract every later step dispatches from, and any contract warnings for the report.
-   `references/discovery.md`.
-3. **Baseline** — measure the repo as it stands, before anything moves.
-   Leaves: a `baseline` result and a timeout budget for every gate but the full e2e suite, which is too expensive to run twice, plus the known flakes.
-   `references/baseline.md`.
-4. **Bump** — move the workspace to the target SDK.
-   Leaves: branch `upgrade/sdk-<target>` and its first checkpoint commit, audited.
-   `references/bump.md`.
-5. **Loop 1** — get compile and tests green: static gates (T0), then builds and unit/native tests (T1).
-   Leaves: every T0/T1 cell green or blocked, one commit per fixed cluster, and a phase three independent audits closed.
-   `references/gates.md`, `references/fix-loop.md`.
-6. **Loop 2** — get smoke green (T2), per app × platform.
-   Leaves: every T2 cell green or blocked, proven by one full smoke pass.
-   `references/e2e.md`.
-7. **Loop 3** — get the full e2e suites green (T3), opening only where Loop 2 closed.
-   Leaves: every T3 cell green or blocked. An app whose contract declares no `e2e` entry has nothing to run here.
-   `references/e2e.md`.
-8. **Final verify and report** — prove the finished branch and close the run.
-   Leaves: every gate re-run once against HEAD, then `report.json`, `summary.md`, `report.html`, the learnings entry, their commit, and phase `complete`.
-   `references/final-report.md`.
+Run these stages in order, collapsing only procedures omitted by the contract:
 
-## Close
+1. [Preflight](references/workflow/preflight.md) — establish or resume the run,
+   validate the immutable contract identity, and prove the checkout can proceed.
+2. [Baseline](references/workflow/baseline.md) — run configured app and platform
+   validation before the bump so pre-existing failures remain attributable.
+3. [Repository bump](references/workflow/bump.md) — dispatch the repository-wide
+   bump, then checkpoint its verified green candidate without repair review gates.
+4. [Validation and repair](references/workflow/validation-and-repair.md) — validate
+   one app scope at a time, queue its complete cluster set, and delegate each queue
+   head through one repair lifecycle and checkpoint.
+5. [Smoke and full E2E](references/workflow/smoke-and-e2e.md) — open eligible
+   app/platform runtime lanes in order and route real failures through the same
+   app-queue boundary.
+6. [Final verification](references/workflow/final-verification.md) — rerun every
+   configured required procedure whose evidence must be current at the final
+   checkpoint.
+7. [Reporting and close](references/reporting.md) — dispatch an agent to render the
+   evidence-backed report, then close the durable run with its returned result.
 
-Every terminal phase — `complete` after step 8, `declined` at setup's scope check — prints the same run-close checklist: one line per phase, the gate/cluster/commit counts, the banner, and the artifact paths, with the rendered report opened in the browser. Setup's preflight checklist opened the run; this closes it. `references/final-report.md`.
+For every dispatch and state transition, apply
+[the verdict schema](references/schemas/verdict.md),
+[general prompt rendering](references/general-prompt-rendering.md), and
+[run state](references/run-state.md). The detailed one-cluster repair lifecycle is
+owned only by the
+[cluster-dispatcher agent](references/agents/cluster-dispatcher.md).
 
-## Reference index
+## Finish
 
-- `references/schemas/*`: load each schema at the step where its producer or consumer runs.
-- `references/worker-briefs.md`: load before every dispatch; it indexes the ten `references/agents/<role>.md` contract files, one of which each dispatch names.
-- `references/dispatch-backends.md`: load at the first dispatch, once the backend is chosen.
-- `references/audit.md`: load at every phase close that landed a commit.
-- `references/monorepo-hoisting.md`: load when a cluster's fingerprint matches a hoisting pattern.
+Complete only when the bump succeeded, all configured final validations are
+green, every eligible smoke and full-E2E lane is green, all change reviews are
+closed, no evidence is stale, and the report artifacts exist. Otherwise finish
+`blocked` with exact scopes, evidence paths, last checkpoint, and next actions.
+Never push, publish, open a PR, or delete run artifacts unless the user asks.

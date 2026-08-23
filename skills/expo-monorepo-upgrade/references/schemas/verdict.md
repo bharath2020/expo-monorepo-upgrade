@@ -1,138 +1,151 @@
-# Schema: verdict
+# Agent verdict
 
-The fixed compact report every worker sends back to the orchestrator on completion. Full logs and
-artifacts stay on disk under `reports/<run-id>/`; the verdict carries the summary plus paths.
+Every preflight, procedure, general review, checkpoint, recovery, generic, or
+reporting agent writes one JSON object to its assigned `verdict.json`, then returns
+that same JSON alone. Logs and detailed findings stay on disk. An orchestrator
+accepts the result only after its schema and evidence bindings are valid.
 
-## Fields
-
-| Field | Type | Meaning |
-| --- | --- | --- |
-| `status` | string | `green` (gate passed, clusters empty) \| `red` (failures need the fix loop) \| `blocked` (this worker goes no further: an exhausted attempt cap, a policy-forbidden fix as the only path, or a contract that cannot carry the run — the dispatching step decides what follows, escalation for a lane and a decline for the run) |
-| `gate` | string \| null | The `gates[].id` this verdict reports on, from the contract check (`references/discovery.md`); `null` from a role that runs no gate |
-| `app` | string \| null | The app coverage key this dispatch was scoped to: an app name, `"*"` when one run covers every app, `null` from a role that runs no gate |
-| `platform` | string \| null | The platform coverage key: a platform name, `"*"` when one run covers every platform, `null` from a role that runs no gate |
-| `duration_s` | number | Wall-clock seconds the run this verdict reports took, timed by the worker itself and reported as a whole second rounded up, minimum 1, so a budget derived from it is reproducible; `references/baseline.md` reads it into `budgets[gate_id].baseline_s` |
-| `clusters` | object[] | Failures grouped by fingerprint; empty array when `status` is `green` |
-| `commit_sha` | string \| null | Commit SHA if this worker committed (fix workers only; `null` otherwise) |
-| `summary` | string | `blocked` only: what you tried, what stopped you, and the evidence behind it — the context a human needs to choose |
-| `options` | string[] | `blocked` only: the concrete, mutually exclusive actions that would unblock this, each phrased as something a human can approve or refuse |
-| `recommendation` | string | One-line next step for the orchestrator; on a `blocked` verdict, which of your `options` you would take and why |
-
-`app` and `platform` repeat the dispatch's coverage keys verbatim, so the orchestrator
-writes the matching `matrix`/`baseline` cell without translating.
-
-## Verdicts from non-gate roles
-
-`discovery`, `bump`, `reviewer`, `fix`, `operations`, and `report` report on a role's work
-rather than one gate's cell: all six send `gate`, `app`, and `platform` as `null` and fill
-`status`, `duration_s`, `clusters`, `commit_sha`, and `recommendation` as usual, so the ledger's
-`verdict` event always has a `status` to copy and its `role` names who reported.
-Two carry extra fields. `discovery` adds `target_sdk`, landing in the ledger's
-`target`; `report` adds `artifact_paths`, the `report.json`, `summary.md`,
-and learnings-doc paths it wrote (`references/agents/report.md`), its `commit_sha` being the docs
-commit. A `fix` worker's `clusters` come back empty on a clean fix, and carry the fingerprints its
-own re-validation surfaced on an attempt it rolled back (`references/agents/fix.md`).
-
-`analyst` is the one role outside this shape: it sends `status` — `green` when it answered,
-`blocked` when the cited evidence cannot settle it — and its paragraph in `recommendation`, alone.
-
-## A blocked verdict is the escalation
-
-Whatever the role, `blocked` means a human has to choose, so the verdict carries the whole
-question: `summary` for context, `options` for the choices, `recommendation` for the default.
-The orchestrator raises exactly those (`references/orchestration-model.md`) — it never
-reconstructs them, because the worker that hit the wall is the one that knows what would lift it.
-Two or three options, each an action rather than a direction: "approve X", not "consider X".
-
-## clusters[]
-
-| Field | Type | Meaning |
-| --- | --- | --- |
-| `fingerprint` | string | Stable dedup key, a filesystem-safe slug (lowercase alphanumeric + hyphens, e.g. `ios-build-missing-symbol-moduleregistry`) — same missing symbol, gradle task, or pod collapses to one slug; the human-readable detail belongs in `diagnosis`, never in the slug |
-| `diagnosis` | string | One-line root-cause statement |
-| `count` | number | Raw failure occurrences this cluster absorbed |
-| `affected` | string[] | App×platform pairs this cluster touches, e.g. `"@acme/storefront×ios"` |
-| `findings_path` | string | Full write-up at `reports/<run-id>/clusters/<fingerprint>/attempt-N/findings.md` |
-| `evidence_paths` | string[] | Raw logs/artifacts on disk backing the diagnosis |
-
-## Gate artifact paths
-
-A gate-runner or monitor writes its combined stdout and stderr to `output.log` and its own
-`verdict.json` beside it, in
-`reports/<run-id>/gates-<phase>/<gate-slug>/<app-slug>/<platform-slug>/` — slugged per
-`references/worker-briefs.md`'s path convention, where a `"*"` key becomes the segment `all`.
-`<phase>` is the ledger phase this dispatch runs under (`references/schemas/ledger.md`), carried
-uniformly: `gates-baseline`, `gates-loop1`, `gates-final`, and so on for every phase, so a later
-phase re-running a gate leaves the earlier phase's evidence standing instead of overwriting the
-record the report rests on. A run writing bare `gates/` for baseline predates this rule and is
-superseded by it. `evidence_paths` cites `output.log` under that name.
-
-## Fixtures
-
-Illustrative only — a fictional repo. A `red` verdict from a `gate-runner` on the `build.ios` gate (T1), scoped to one app after a bump to SDK 55:
+## Shape
 
 ```json
 {
+  "schema_version": 1,
+  "dispatcher_id": null,
+  "unit_id": "post-validation--apps-example--ios--validation",
+  "procedure_ref": "apps[0].platforms.ios.validation",
+  "stage": "post_validation",
   "status": "red",
-  "gate": "build.ios",
-  "app": "@acme/storefront",
-  "platform": "ios",
-  "duration_s": 214,
+  "summary": "The iOS build failed while linking ExpoModulesCore.",
+  "duration_seconds": 214,
+  "source_sha_before": "<sha>",
+  "source_sha_after": "<sha>",
+  "input_candidate_diff_sha256": null,
+  "base_prompt_sha256": "<sha256>",
+  "brief_sha256": "<sha256>",
+  "evidence_paths": ["reports/<run-id>/units/<unit-id>/attempt-1/dispatch-1/output.log"],
   "clusters": [
-    { "fingerprint": "ios-build-missing-symbol-moduleregistry", "count": 1, "affected": ["@acme/storefront×ios"],
-      "diagnosis": "expo-modules-core pod pinned below SDK 55's ABI; ModuleRegistry symbol not found at link time.",
-      "findings_path": "reports/run-2026-08-14T19-05Z/clusters/ios-build-missing-symbol-moduleregistry/attempt-1/findings.md",
-      "evidence_paths": ["reports/run-2026-08-14T19-05Z/gates-loop1/build-ios/acme-storefront/ios/output.log"] }
+    {
+      "fingerprint": "link-expo-modules-core-missing-symbol",
+      "summary": "ExpoModulesCore is missing a symbol required by the app target.",
+      "failure_evidence": "The linker evidence is cited in findings.md.",
+      "evidence_paths": ["reports/<run-id>/units/<unit-id>/attempt-1/dispatch-1/findings.md"]
+    }
   ],
-  "commit_sha": null,
-  "recommendation": "Dispatch a fix worker to align expo-modules-core to the SDK 55 pod version, then re-run build.ios for the storefront app."
+  "changes": {
+    "files": [],
+    "commit_sha": null,
+    "candidate_snapshot_path": null,
+    "candidate_diff_sha256": null
+  },
+  "result": null,
+  "blocker": null,
+  "recommendation": "Dispatch this app's ordered repair queue to a cluster orchestrator."
 }
 ```
 
-A `green` verdict from a platform-less gate — `typecheck` has no platform axis, so `platform` is `"*"` and one cell per app is written:
+## Common invariants
 
-```json
-{
-  "status": "green",
-  "gate": "typecheck",
-  "app": "@acme/storefront",
-  "platform": "*",
-  "duration_s": 41,
-  "clusters": [],
-  "commit_sha": null,
-  "recommendation": "T0 is green; clear to dispatch the T1 gates."
-}
-```
+- `status` is `green`, `red`, or `blocked`.
+- Identity, source SHA, prompt hashes, candidate input hash, and dispatcher id
+  equal the immutable brief and state record. `dispatcher_id` is non-null only for
+  an agent dispatched by one single-cluster dispatcher.
+- Every evidence path exists inside the run directory and is repository-relative.
+- `green` has no clusters or blocker, except an authoritative green procedure may
+  separately carry its complete empty same-scope cluster set.
+- `red` has one or more clusters and no blocker. An observation or authoritative
+  rerun reports the complete cluster set produced by its one app-scoped procedure.
+- `blocked` has a non-null blocker and may include already diagnosed clusters.
+- Fingerprints are stable lowercase slugs meaningful only within their literal app
+  and optional platform scope.
 
-A `blocked` verdict from a `fix` worker whose only remaining fix is escalation-listed (B12),
-carrying the question a human has to answer:
+## Cluster dispatcher results
 
-```json
-{
-  "status": "blocked", "gate": null, "app": null, "platform": null,
-  "duration_s": 640, "commit_sha": null,
-  "clusters": [{ "fingerprint": "ios-svg-abi-mismatch", "count": 1, "affected": ["@acme/storefront×ios"],
-    "diagnosis": "react-native-svg 15.8.0 links against the pre-SDK-55 ExpoModulesCore ABI; no released version targets 55.",
-    "findings_path": "reports/run-2026-08-14T19-05Z/clusters/ios-svg-abi-mismatch/attempt-3/findings.md",
-    "evidence_paths": ["reports/run-2026-08-14T19-05Z/gates-loop1/build-ios/acme-storefront/ios/output.log"] }],
-  "summary": "Three attempts spent. Upstream 15.9.0 carries the fix but is unreleased; every path that builds today needs a forked pin, which B7 and the escalation list forbid without a decision.",
-  "options": [
-    "Pin react-native-svg to the maintainer's sdk-55 branch for this run",
-    "Drop ios from the storefront app's platforms and finish the upgrade on android",
-    "Stop here and resume when 15.9.0 ships"
-  ],
-  "recommendation": "Pin the branch: it is one resolutions entry, the diff is upstream's own, and the pin comes out when 15.9.0 lands."
-}
-```
+A cluster dispatcher writes `dispatchers/<dispatcher-id>/result.json` and returns
+that same JSON alone. It is not an agent verdict. It contains:
 
-A `green` verdict from `discovery`, the non-gate shape — the three coverage fields
-are `null`, and `target_sdk` sits alongside them:
+- schema version, dispatcher id, literal app path, input-state SHA-256, and the
+  complete supplied ordered queue identity;
+- exactly one `selected_cluster`, equal to the supplied queue head;
+- `status` equal to `ready_for_checkpoint`, `blocked`, or `cancelled`;
+- repair, code-review, code-change-principles-review, and authoritative-procedure
+  verdict paths, using `null` for gates that did not validly open;
+- candidate snapshot/hash when ready, the authoritative complete same-scope
+  cluster set, all evidence paths, blocker, and recommendation.
 
-```json
-{
-  "status": "green", "gate": null, "app": null, "platform": null,
-  "duration_s": 92, "clusters": [], "commit_sha": null,
-  "target_sdk": "55",
-  "recommendation": "Resolved next to SDK 55; contract complete — 1 app, 2 platforms, 6 gates (2 T0, 2 T1, 1 T2, 1 T3); no warnings, no drift. Clear to baseline."
-}
-```
+It never reports a result for a second cluster. `ready_for_checkpoint` requires a
+green repair, exactly two green reviews, and a green complete original procedure
+rerun, all bound to the same candidate identity.
+
+## Procedure agents
+
+Observation agents do not edit tracked files or Git. When bound to a candidate,
+their input hash identifies the exact uncommitted diff they observed.
+
+A green bump agent has a non-empty file list, no commit SHA, an immutable candidate
+snapshot and hash, and equal source SHA fields. It leaves the candidate uncommitted.
+
+A green repair agent has the same change shape: non-empty files, no commit SHA,
+snapshot and hash, and equal source SHA fields. A red repair restores only its own
+iteration changes to the input candidate; if it cannot prove restoration, it is
+blocked.
+
+## General review agents
+
+Review procedure references are `audit.code-review` and
+`audit.code-change-principles`. They may be dispatched only after the source repair
+verdict is green. They report no source changes or commits and bind their verdict
+to `input_candidate_diff_sha256`.
+
+A red review places each required change in `clusters` as a scope-local review
+comment with exact diff evidence. A changed candidate invalidates both reviewers'
+prior verdicts.
+
+## General checkpoint agents
+
+Checkpoint procedure reference is `checkpoint.finalize`. Its input candidate hash
+must equal the accepted candidate. A green verdict has the exact candidate file
+list and a non-null commit SHA; `source_sha_after` equals that commit. It cites
+verification of parent, trailers, file set, and diff hash.
+
+For a bump checkpoint, review and authoritative-validation inputs are
+`not_required`. For a repair checkpoint, the verdict cites both green reviews and
+the green authoritative rerun bound to the same candidate hash with the target
+fingerprint absent. The checkpoint agent never edits candidate content.
+
+## Generic workers
+
+Either orchestrator may dispatch a fresh general worker for a bounded
+skill-defined task. There is no fixed generic-worker role, procedure-reference
+namespace, or operation catalog. The rendered brief defines the task identity,
+immutable inputs, allowed paths, forbidden actions, and expected `result` shape.
+
+A generic worker reports no source change or commit unless its bounded assignment
+is checkpoint finalization. For a control-plane write, `result` includes the input
+and written state paths and SHA-256 values, evidence inputs, app/platform scope,
+and queue before/after when a queue is affected. A green verdict requires every
+declared output and reread hash to match. A blocked verdict must not leave a
+partial mutation. The worker never decides the next workflow transition unless it
+was explicitly dispatched as an orchestrator rather than a general worker.
+
+## Other general agents
+
+Preflight uses `preflight.inspect` and changes neither source nor state. Reporting
+uses `report.render`, writes only its assigned `report.json` and `summary.md`, and
+changes neither source nor state. Both bind their outputs to the immutable input
+state and brief identities.
+
+## Commit-recovery agents
+
+A commit-before-verdict recovery agent uses
+`recovery.commit-before-verdict`. Its `changes` identify the existing commit it
+inspected; the agent did not create it. It returns green only when the existing
+commit exactly matches the previously accepted candidate and checkpoint dispatch
+evidence. Otherwise it returns blocked.
+
+## Malformed or missing results
+
+Reject a verdict when any required field, status invariant, source identity,
+prompt hash, candidate binding, or evidence path fails. Follow the one-time
+identical transport redispatch rule in
+[general prompt rendering](../general-prompt-rendering.md); never repair a malformed
+result in orchestrator memory.

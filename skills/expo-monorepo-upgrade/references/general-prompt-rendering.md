@@ -1,0 +1,120 @@
+# General prompt rendering
+
+Use these guidelines when assembling any worker brief. They define only the
+instructions shared by every dispatch; the active workflow supplies its own stage
+instructions.
+
+Every procedure or skill-defined agent receives one immutable brief:
+
+```text
+rendered YAML prompt or skill-defined base task
++ common orchestration envelope
++ exactly one stage prompt from the owning workflow
+```
+
+An orchestrator may dispatch a fresh generic worker to assemble and record the
+brief as a bounded control-plane task. There is no special renderer-worker subtype.
+
+## Render
+
+1. Read the selected YAML prompt from the immutable contract snapshot, or accept
+   the skill-defined base task from the applicable workflow.
+2. For YAML procedures, substitute only the inputs allowed by
+   [the YAML contract](yaml-contract.md). Preserve all other bytes and ordering.
+3. Reject any remaining `{{...}}` or `[[...]]` token.
+4. Hash the completed base task as `base_prompt_sha256`.
+5. Append the common envelope below, then the one stage prompt supplied by the
+   active workflow.
+6. Write the complete brief to
+   `reports/<run-id>/prompts/<unit-id>/attempt-<n>/dispatch-<m>.md`. Hash the full
+   brief as `brief_sha256`, omitting only its own hash line, and store its path and
+   both hashes in state before dispatch.
+
+Do not combine stage prompts, recreate one here, or append instructions from a
+different workflow. Use a filesystem-safe unit id such as
+`<stage>--<app-slug>--<platform-or-all>--<procedure>`. The literal procedure
+reference and app path remain the authoritative identity in the brief and verdict.
+
+## Common envelope
+
+Append this block with literal values:
+
+```markdown
+---
+
+## Orchestration context
+
+- Run: <run-id>
+- Cluster dispatcher: <dispatcher-id-or-null>
+- Unit: <unit-id>
+- Stage: <stage>
+- Procedure: <procedure-ref>
+- Repository root: <absolute-repo-root>
+- App path: <repo-relative-path-or-null>
+- Platform: <platform-or-null>
+- Procedure attempt: <n>/<cap>
+- Transport dispatch: <m>/2
+- Source SHA: <source-sha>
+- Starting checkpoint: <checkpoint-sha>
+- Candidate snapshot: <absolute-immutable-candidate-directory-or-null>
+- Candidate diff SHA-256: <sha256-or-null>
+- Review feedback: <absolute-review-verdict-paths-or-none>
+- Deadline: <absolute-timestamp-and-duration>
+- Findings: <absolute-findings-path>
+- Output log: <absolute-output-path>
+- Verdict: <absolute-verdict-path>
+- Base prompt SHA-256: <hash-of-rendered-base-task>
+- Brief SHA-256: <hash-of-this-brief-with-this-line-omitted>
+
+## Execution contract
+
+Follow the task above exactly. For a contract-backed execution, its YAML prompt
+owns all repository-specific commands, prerequisites, and recovery steps. Do not
+invent a replacement command or fallback when it cannot be completed. For a
+skill-defined task, use only its supplied immutable inputs and assigned outputs.
+
+Work only in the stated scope. Capture stdout, stderr, device or pipeline artifacts,
+and exact failure points under the supplied dispatch directory. Keep working and
+poll the process you started until it finishes or the deadline expires; never start
+a duplicate because an initial wait yielded.
+
+Write findings and a verdict matching <skill-dir>/references/schemas/verdict.md
+before returning. Return the verdict JSON alone after the file exists.
+```
+
+`base_prompt_sha256` identifies execution content across transport retries.
+`brief_sha256` identifies one dispatch, including paths and deadline. For
+`validation`, `smoke`, and `full_e2e`, YAML runtime inputs remain empty, while
+`Procedure`, `App path`, and optional `Platform` in the envelope are mandatory
+orchestration metadata.
+
+## Deadlines
+
+The YAML carries no orchestration timeout. Establish a measured budget per
+procedure reference:
+
+- First invocation: choose a conservative host/tool deadline; app validation at
+  least 10 minutes, native validation or smoke at least 30 minutes, and full E2E at
+  least 60 minutes unless the user or environment imposes another cap.
+- Later invocation: use `max(3 × last successful duration, first-invocation floor)`.
+- After the first post-bump timeout, allow one cold-build correction by doubling
+  the budget and rerunning the same YAML prompt and runtime inputs as a new
+  procedure attempt. A second timeout is a real failure.
+
+The main orchestrator chooses the deadline from durable timings and dispatches a
+generic worker to record it before dispatch. Expiry stops waiting safely; it does
+not authorize killing remote work. Dispatch a fresh generic worker to record
+whether the process stopped, remains live, or is unknown so resume cannot duplicate
+it.
+
+## Malformed or missing verdict
+
+Inspect the assigned verdict path first. Rejoin a live worker or process. If both
+are gone, reconcile any checkpoint commit or uncommitted bump/repair candidate
+through [run state](run-state.md) before redispatch. When no owned source change
+landed, dispatch a generic worker to record `worker_lost`, then a fresh generic
+worker to render and record transport dispatch 2 under the same procedure attempt.
+Preserve the rendered base task, runtime inputs, source identity, starting
+checkpoint, candidate and review inputs, and stage prompt; change only dispatch
+identity, deadline, output paths, and `brief_sha256`. A second transport failure
+blocks the unit without spending a repair attempt.
