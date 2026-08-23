@@ -41,6 +41,8 @@ Before a run, read:
 
 ## Workflow
 
+When invoked with `--test-run`, follow every stage below except step 3 (Repository bump), and do not require bump success to finish.
+
 Run these stages in order, collapsing only procedures omitted by the contract:
 
 1. [Preflight](references/workflow/preflight.md) — establish or resume the run,
