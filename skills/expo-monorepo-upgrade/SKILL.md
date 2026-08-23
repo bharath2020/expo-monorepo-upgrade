@@ -17,6 +17,8 @@ Before a run, read:
   terminal states;
 - [general prompt rendering](references/general-prompt-rendering.md) for the shared
   prompt envelope, identity hashes, deadlines, and transport recovery;
+- [harness and model selection](references/harness-and-model-selection.md) for the
+  required Codex and Claude Code profiles, compatibility gates, and escalation;
 - [Herdr dispatch](references/herdr-dispatch.md) for mandatory child-session
   launch, waiting, resume, and cleanup;
 - [run state](references/run-state.md) for persistence, resume, and recovery.
@@ -33,8 +35,12 @@ Before a run, read:
   files.
 - A missing optional YAML entry means no procedure exists for that scope.
 - Launch every child-agent session through Herdr. Do not silently fall back to
-  native subagents or another harness; an unavailable or incompatible Herdr server
-  blocks dispatch with its exact status evidence.
+  native subagents or non-Herdr transport; an unavailable or incompatible Herdr
+  server blocks dispatch with its exact status evidence.
+- Resolve every child harness, model, and effort from
+  [harness and model selection](references/harness-and-model-selection.md) before
+  rendering its brief. Never let inherited settings or an orchestrator's general
+  judgment select `xhigh`.
 - Use [general prompt rendering](references/general-prompt-rendering.md) for every
   general prompt guideline and every rendered brief. That reference owns the
   common envelope and rendering mechanics; the applicable workflow reference owns
@@ -56,7 +62,8 @@ Before a run, read:
   repository root as its initial working directory so repository-local skills and
   instructions load for that agent. Set the pane working directory before starting
   the agent; starting elsewhere and changing directory afterward is not
-  equivalent.
+  equivalent. Apply the Claude Code instruction and skill compatibility gate before
+  selecting that harness.
 
 ## Workflow
 

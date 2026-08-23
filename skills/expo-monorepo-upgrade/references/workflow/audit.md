@@ -15,6 +15,13 @@ The workers are blind to one another's output. Code review checks correctness,
 scope, regressions, and evidence. The principles review applies
 [code-change principles](../principles/code-changes.md).
 
+Resolve both review profiles through
+[harness and model selection](../harness-and-model-selection.md). Bind selection to
+the repair candidate's recorded author harness: code review uses the opposite model
+family when Claude is eligible, while the principles review uses the complementary
+profile from the policy. If Claude is ineligible, record the degraded all-Codex
+review selection rather than raising reasoning effort.
+
 For either assignment, fill this skill-defined base task with immutable values:
 
 ```markdown
@@ -29,6 +36,9 @@ For either assignment, fill this skill-defined base task with immutable values:
 - Starting checkpoint: <source-sha>
 - Candidate snapshot: <immutable-candidate-directory>
 - Candidate diff SHA-256: <sha256>
+- Candidate author harness: <codex-or-claude>
+- Candidate author model: <exact-model-id>
+- Candidate author effort: <effort>
 - Original rendered prompt: <path>
 - Change findings: <path>
 - Repair success verdict: <path>

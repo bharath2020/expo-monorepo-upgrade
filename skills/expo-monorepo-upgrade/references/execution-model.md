@@ -57,6 +57,11 @@ evidence-producing recovery check uses a fresh bounded agent. Each cluster
 dispatcher is also fresh for one queue head. Worker `idle` or process exit is not
 success; require its valid verdict or dispatcher result file.
 
+Before rendering any brief, resolve its exact harness, model, and effort through
+[harness and model selection](harness-and-model-selection.md). The selected profile
+is part of task identity: identical transport redispatches retain it, while repair
+attempts and opposite-family reviews follow that policy's explicit progression.
+
 ## Units and attempts
 
 Normalize each procedure and skill-defined task into a scope-qualified unit. A

@@ -49,6 +49,7 @@ Use `schema_version: 1` and these top-level fields:
 | `target_sdk` | Concrete target supplied by the user |
 | `source_sha`, `branch`, `checkpoint_sha` | Starting revision, upgrade branch, latest accepted commit |
 | `contract_path`, `contract_sha256`, `contract_snapshot` | Immutable contract identity |
+| `main_profile`, `harness_capabilities` | Required orchestrator profile plus preflighted Codex, Claude Code, Herdr, instruction, and skill compatibility evidence |
 | `phase`, `status` | Current stage and `running`, `complete`, `blocked`, or `cancelled` |
 | `units` | Procedure and skill-defined worker units |
 | `clusters` | Scope-qualified fingerprint to cluster record |
@@ -56,8 +57,8 @@ Use `schema_version: 1` and these top-level fields:
 | `cluster_dispatchers` | Dispatcher-id map of input queue head, selected cluster, status, heartbeat, and result path |
 | `active_candidate` | Sole uncommitted bump or repair candidate, owner, snapshot, hash, and files |
 | `locks` | Active resource lock to unit or dispatcher id |
-| `in_flight` | Agent handle, process evidence, heartbeat, brief, and verdict paths |
-| `herdr` | Workspace, tab, orchestrator pane, two-row worker-grid pane ids, and next slot; live child agents remain in `in_flight` |
+| `in_flight` | Active agent handle, harness, model, effort, profile selection, process evidence, heartbeat, brief, and verdict paths; completed assignments are removed after reconciliation |
+| `herdr` | Workspace, tab, orchestrator pane, active-only two-row worker-grid pane ids, next row-first position, and historical closed pane ids |
 | `checkpoints` | Ordered verified commits and checkpoint-worker evidence |
 | `decisions`, `open_questions` | Durable human and orchestration decisions |
 | `started_at`, `updated_at` | UTC timestamps |
@@ -72,6 +73,13 @@ A unit record contains:
   "app_path": "apps/example",
   "platform": "ios",
   "dispatcher_id": null,
+  "profile_id": "observation",
+  "harness": "claude",
+  "model": "claude-sonnet-5",
+  "reasoning_effort": "medium",
+  "profile_selection": "preferred",
+  "profile_selection_reason": "Claude compatibility passed preflight.",
+  "profile_evidence_paths": ["reports/<run-id>/units/preflight/attempt-1/dispatch-1/verdict.json"],
   "status": "pending",
   "procedure_attempt": 0,
   "procedure_attempt_cap": 1,
@@ -96,21 +104,24 @@ green.
 
 Each cluster record contains app/platform scope, fingerprint, source procedure,
 baseline relationship, queue position, active dispatcher id, repair attempt count,
-candidate hashes, two review verdicts, authoritative reruns, checkpoint SHA, and
-next action. Queue statuses are `queued`, `selected`, `repairing`, `reviewing`,
+candidate hashes and author profile, two reviewer profiles and verdicts,
+authoritative reruns, checkpoint SHA, and next action. Queue statuses are `queued`,
+`selected`, `repairing`, `reviewing`,
 `validating`, `ready_for_checkpoint`, `closed`, `resolved_by_overlap`, or `blocked`.
 
 A dispatcher record contains the supplied app queue identity and records exactly
 its head as the selected cluster. It cannot skip or reorder entries and cannot
 select a second cluster. Status is `running`, `ready_for_checkpoint`, `blocked`,
-`cancelled`, or `retired`.
+`cancelled`, or `retired`. It also records its harness, model, effort, profile
+selection reason/evidence, and every child profile it selected.
 
 ## Events
 
 Every JSONL event has `type` and UTC `at`. Use at least:
 
 - `run_started`, `run_resumed`, `phase_started`, `phase_closed`;
-- `unit_rendered`, `unit_dispatched`, `heartbeat`, `worker_lost`, `verdict`;
+- `profile_selected`, `profile_escalated`, `unit_rendered`, `unit_dispatched`,
+  `heartbeat`, `worker_lost`, `verdict`, `pane_closed`, `worker_grid_compacted`;
 - `clusters_discovered`, `cluster_queued`, `cluster_selected`;
 - `dispatcher_started`, `dispatcher_heartbeat`, `dispatcher_result`,
   `dispatcher_retired`;
@@ -136,6 +147,8 @@ that apply.
 3. The main orchestrator decides how to reconcile every in-flight agent before
    judging checkout cleanliness. A valid verdict wins. Otherwise rejoin a live
    agent or its process.
+   After accepting and recording a valid result, close its matching pane and
+   compact the active grid before another dispatch.
 4. Redispatch only after verdict, agent, and process are all absent and a
    generic worker has recorded `worker_lost`. Reconcile any uncommitted
    candidate or commit-before-verdict window first.
@@ -152,7 +165,9 @@ that apply.
    selection was recorded, dispatch the current ordered queue and require the
    replacement to select its head.
 8. Continue at the earliest unsettled prerequisite. Do not replay green work or
-   spend a repair attempt for an identical transport redispatch.
+   spend a repair attempt for an identical transport redispatch. Preserve its
+   harness, model, and effort; resolve a new profile only for a new substantive
+   attempt under the recorded policy.
 
 ## Candidate recovery
 

@@ -14,6 +14,13 @@ accepts the result only after its schema and evidence bindings are valid.
   "unit_id": "post-validation--apps-example--ios--validation",
   "procedure_ref": "apps[0].platforms.ios.validation",
   "stage": "post_validation",
+  "profile_id": "observation",
+  "harness": "claude",
+  "model": "claude-sonnet-5",
+  "reasoning_effort": "medium",
+  "profile_selection": "preferred",
+  "profile_selection_reason": "Claude compatibility passed preflight.",
+  "profile_evidence_paths": ["reports/<run-id>/units/preflight/attempt-1/dispatch-1/verdict.json"],
   "status": "red",
   "summary": "The iOS build failed while linking ExpoModulesCore.",
   "duration_seconds": 214,
@@ -46,9 +53,14 @@ accepts the result only after its schema and evidence bindings are valid.
 ## Common invariants
 
 - `status` is `green`, `red`, or `blocked`.
-- Identity, source SHA, prompt hashes, candidate input hash, and dispatcher id
-  equal the immutable brief and state record. `dispatcher_id` is non-null only for
-  an agent dispatched by one single-cluster dispatcher.
+- `harness` is `codex` or `claude`; `profile_selection` is `preferred`,
+  `fallback`, or `human_escalation`. A fallback or escalation has a non-empty
+  reason and evidence path.
+- Identity, harness, model, reasoning effort, profile selection and evidence,
+  source SHA, prompt hashes, candidate input hash, and dispatcher id equal the
+  immutable brief and state record.
+  `dispatcher_id` is non-null only for an agent dispatched by one single-cluster
+  dispatcher.
 - Every evidence path exists inside the run directory and is repository-relative.
 - `green` has no clusters or blocker, except an authoritative green procedure may
   separately carry its complete empty same-scope cluster set.
@@ -65,6 +77,8 @@ that same JSON alone. It is not an agent verdict. It contains:
 
 - schema version, dispatcher id, literal app path, input-state SHA-256, and the
   complete supplied ordered queue identity;
+- dispatcher harness, model, effort, profile selection, and every child profile it
+  selected;
 - exactly one `selected_cluster`, equal to the supplied queue head;
 - `status` equal to `ready_for_checkpoint`, `blocked`, or `cancelled`;
 - repair, code-review, code-change-principles-review, and authoritative-procedure
@@ -95,6 +109,11 @@ Review procedure references are `audit.code-review` and
 `audit.code-change-principles`. They may be dispatched only after the source repair
 verdict is green. They report no source changes or commits and bind their verdict
 to `input_candidate_diff_sha256`.
+
+Their harness/model/effort must match the candidate-author rule in
+[harness and model selection](../harness-and-model-selection.md). A code review
+uses the opposite model family when Claude is eligible; otherwise both verdicts
+record the degraded all-Codex selection.
 
 A red review places each required change in `clusters` as a scope-local review
 comment with exact diff evidence. A changed candidate invalidates both reviewers'

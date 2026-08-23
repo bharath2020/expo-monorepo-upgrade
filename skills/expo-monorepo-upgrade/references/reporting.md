@@ -60,12 +60,14 @@ Use these top-level sections:
 - `baseline`: every configured validation result and its evidence, including
   pre-existing and blocked clusters;
 - `procedures`: every unit with stage, procedure reference, status, attempt counts,
-  source SHA, duration, hashes, prompt/verdict paths, and evidence;
+  source SHA, resolved harness/model/effort and selection reason, duration, hashes,
+  prompt/verdict paths, and evidence;
 - `clusters`: scope-qualified fingerprint, durable app queue position,
   top-of-queue dispatcher selection, attempts, findings, checkpoint, final status,
   and next action;
-- `audits`: successful repair candidate hash, two general-review verdicts, review
-  iterations, authoritative rerun, and resulting checkpoint;
+- `audits`: successful repair candidate hash and author profile, two reviewer
+  profiles and verdicts, any degraded independence, review iterations,
+  authoritative rerun, and resulting checkpoint;
 - `checkpoints`: ordered source commits plus checkpoint-agent evidence;
 - `decisions`: every question, answer, and resulting transition;
 - `follow_ups`: flakes, pre-existing failures, ineligible work, contract

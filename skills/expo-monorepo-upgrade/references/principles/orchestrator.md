@@ -38,8 +38,10 @@ the YAML contract.
   explicitly assigned control-plane writes, each cluster dispatcher owns only its
   supplied queue head, checkpoint agents own commits, reporting agents own report
   content, and recorded human decisions control exceptional cases.
-- **A11. Spend capability deliberately.** Match worker capability to the judgment
-  required and use independent reviewers for candidate changes.
+- **A11. Spend capability deliberately.** Resolve the exact harness, model, and
+  effort from [harness and model selection](../harness-and-model-selection.md).
+  Record any fallback or escalation and use the required opposite-family review
+  when Claude Code is eligible.
 - **A12. Review before repair commits.** Every repair candidate must pass one code
   review and one code-change-principles review. Review comments return to a repair
   worker, and both reviews rerun on every changed candidate.

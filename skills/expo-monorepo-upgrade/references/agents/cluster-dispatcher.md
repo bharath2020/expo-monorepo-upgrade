@@ -21,6 +21,8 @@ The main orchestrator supplies:
   workflow stage-prompt references;
 - the current checkpoint and exact attempt budget;
 - immutable prompt, candidate, review, verdict, evidence, and state paths;
+- the immutable harness/model policy, current capability evidence, and candidate
+  author profile when one exists;
 - applicable locks and recorded decisions, including the input-state identity.
 
 Reject the dispatch if the queue is empty, contains another app, or its head lacks
@@ -33,8 +35,10 @@ run-state mutation it needs; the dispatcher itself remains a decision role.
 
 ## One-cluster repair loop
 
-1. Record the queue head as this dispatcher's selected cluster. Dispatch one repair
-   agent with the matching `repair_validation` or
+1. Record the queue head as this dispatcher's selected cluster. Resolve the repair
+   profile for its substantive attempt number through
+   [harness and model selection](../harness-and-model-selection.md), then dispatch
+   one repair agent with the matching `repair_validation` or
    `repair_smoke_e2e` procedure and the repair stage prompt from its owning
    workflow.
 2. While the repair is running, or when its verdict is red, blocked, malformed, or
@@ -44,7 +48,8 @@ run-state mutation it needs; the dispatcher itself remains a decision role.
 3. Only after the repair agent returns a valid green verdict with an uncommitted
    candidate, dispatch exactly two fresh general workers concurrently:
    `audit.code-review` and `audit.code-change-principles`.
-   Render both through the stage prompt in
+   Select their profiles from the candidate author's model family so code review
+   uses the opposite family when Claude is eligible. Render both through the stage prompt in
    [change review](../workflow/audit.md).
 4. If either reviewer returns required changes, collect both verdicts and dispatch
    a new repair-agent iteration for this same cluster with all review feedback.
@@ -76,8 +81,9 @@ for another cluster.
   orchestrator unchanged; this dispatcher does not select, reprioritize, or repair
   them.
 - Transport recovery may redispatch an identical agent task once without spending
-  a repair attempt. A new repair candidate or review-correction pass does spend an
-  attempt.
+  a repair attempt and preserves its harness, model, and effort. A new repair
+  candidate or review-correction pass does spend an attempt and resolves that
+  attempt's declared profile.
 - The dispatcher never reconstructs evidence from prose or conversation history.
 - The dispatcher never edits source, executes a repository procedure itself,
   performs either review, stages, commits, or selects a second cluster.

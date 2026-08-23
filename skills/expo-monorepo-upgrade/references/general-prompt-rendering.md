@@ -23,9 +23,11 @@ brief as a bounded control-plane task. There is no special renderer-worker subty
    [the YAML contract](yaml-contract.md). Preserve all other bytes and ordering.
 3. Reject any remaining `{{...}}` or `[[...]]` token.
 4. Hash the completed base task as `base_prompt_sha256`.
-5. Append the common envelope below, then the one stage prompt supplied by the
+5. Resolve and record the dispatch profile through
+   [harness and model selection](harness-and-model-selection.md).
+6. Append the common envelope below, then the one stage prompt supplied by the
    active workflow.
-6. Write the complete brief to
+7. Write the complete brief to
    `reports/<run-id>/prompts/<unit-id>/attempt-<n>/dispatch-<m>.md`. Hash the full
    brief as `brief_sha256`, omitting only its own hash line, and store its path and
    both hashes in state before dispatch.
@@ -49,6 +51,14 @@ Append this block with literal values:
 - Unit: <unit-id>
 - Stage: <stage>
 - Procedure: <procedure-ref>
+- Profile: <profile-id>
+- Harness: <codex-or-claude>
+- Model: <exact-model-id>
+- Reasoning effort: <low-or-medium-or-high-or-xhigh-or-max>
+- Profile selection: <preferred-or-fallback-or-human-escalation>
+- Profile selection reason: <literal-reason>
+- Profile evidence:
+  <repository-relative-capability-or-decision-evidence-paths-or-none-for-bootstrap-preflight>
 - Repository root: <absolute-repo-root>
 - App path: <repo-relative-path-or-null>
 - Platform: <platform-or-null>
@@ -88,6 +98,11 @@ before returning. Return the verdict JSON alone after the file exists.
 `Procedure`, `App path`, and optional `Platform` in the envelope are mandatory
 orchestration metadata.
 
+Harness, model, effort, selection reason, and profile evidence are immutable
+dispatch identity. Preserve them for an identical transport redispatch. A fresh
+substantive repair attempt resolves the next attempt profile before rendering its
+new brief.
+
 ## Deadlines
 
 The YAML carries no orchestration timeout. Establish a measured budget per
@@ -116,5 +131,6 @@ landed, dispatch a generic worker to record `worker_lost`, then a fresh generic
 worker to render and record transport dispatch 2 under the same procedure attempt.
 Preserve the rendered base task, runtime inputs, source identity, starting
 checkpoint, candidate and review inputs, and stage prompt; change only dispatch
-identity, deadline, output paths, and `brief_sha256`. A second transport failure
-blocks the unit without spending a repair attempt.
+identity, deadline, output paths, and `brief_sha256`. Preserve the selected harness,
+model, and effort. A second transport failure blocks the unit without spending a
+repair attempt.
