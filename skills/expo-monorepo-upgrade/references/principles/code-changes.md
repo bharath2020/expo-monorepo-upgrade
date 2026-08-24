@@ -33,6 +33,10 @@ the repository procedure in YAML.
 - **B12. Preserve candidate ownership.** On a failed repair iteration, save its
   evidence and restore only changes made by that iteration to the prior candidate.
   If ownership cannot be proven, return blocked and leave the tree untouched.
+- **B13. Do not suppress failures.** Do not add or broaden lint disables,
+  type-check ignores, test skips, warning filters, exclusions, or configuration
+  relaxations to make a check pass. Repair the underlying cause; if the repair
+  prompt does not authorize the necessary change, return blocked.
 
 Keep appended instructions affirmative, concrete, and path-based. Route exceptions
 to `blocked`; never hide them in prose or a guessed fallback.
