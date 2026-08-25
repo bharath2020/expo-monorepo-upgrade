@@ -15,7 +15,8 @@ The main orchestrator supplies:
 
 - one dispatcher id and one literal app path;
 - one ordered queue containing only that app's eligible repair clusters, including
-  each cluster's platform, fingerprint, summary, and failure evidence;
+  each cluster's platform, fingerprint, risk tier and basis, grouping basis,
+  summary, repair targets, and failure evidence;
 - the matching repair procedure reference, the complete original validation,
   smoke, or full-E2E procedure reference that discovered it, and their owning
   workflow stage-prompt references;

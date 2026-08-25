@@ -9,6 +9,10 @@ Render each selected validation procedure through
 [general prompt rendering](../general-prompt-rendering.md), then append:
 
 ```markdown
+Before categorizing failures, read and follow:
+
+<absolute-skill-dir>/references/failure-clustering.md
+
 Observe the complete configured validation at Source SHA before the SDK bump. Do
 not edit tracked files, change Git state, or commit. Build products and logs are
 allowed. On failure, return the complete cluster set for only the stated app and

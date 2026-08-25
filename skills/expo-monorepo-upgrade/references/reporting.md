@@ -62,9 +62,9 @@ Use these top-level sections:
 - `procedures`: every unit with stage, procedure reference, status, attempt counts,
   source SHA, resolved harness/model/effort and selection reason, duration, hashes,
   prompt/verdict paths, and evidence;
-- `clusters`: scope-qualified fingerprint, durable app queue position,
-  top-of-queue dispatcher selection, attempts, findings, checkpoint, final status,
-  and next action;
+- `clusters`: scope-qualified fingerprint, risk tier and grouping basis, durable app
+  queue position, top-of-queue dispatcher selection, attempts, findings,
+  checkpoint, final status, and next action;
 - `audits`: successful repair candidate hash and author profile, two reviewer
   profiles and verdicts, any degraded independence, review iterations,
   authoritative rerun, and resulting checkpoint;

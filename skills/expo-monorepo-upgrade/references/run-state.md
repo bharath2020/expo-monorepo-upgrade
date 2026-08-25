@@ -103,10 +103,10 @@ Unit statuses are `pending`, `running`, `green`, `red`, `blocked`, `ineligible`,
 green.
 
 Each cluster record contains app/platform scope, fingerprint, source procedure,
-baseline relationship, queue position, active dispatcher id, repair attempt count,
-candidate hashes and author profile, two reviewer profiles and verdicts,
-authoritative reruns, checkpoint SHA, and next action. Queue statuses are `queued`,
-`selected`, `repairing`, `reviewing`,
+baseline relationship, risk tier and basis, grouping basis, queue position, active
+dispatcher id, repair attempt count, candidate hashes and author profile, two
+reviewer profiles and verdicts, authoritative reruns, checkpoint SHA, and next
+action. Queue statuses are `queued`, `selected`, `repairing`, `reviewing`,
 `validating`, `ready_for_checkpoint`, `closed`, `resolved_by_overlap`, or `blocked`.
 
 A dispatcher record contains the supplied app queue identity and records exactly

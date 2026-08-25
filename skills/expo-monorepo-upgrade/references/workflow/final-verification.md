@@ -6,6 +6,10 @@ Render each selected final validation, smoke, or full-E2E procedure through
 [general prompt rendering](../general-prompt-rendering.md), then append:
 
 ```markdown
+Before categorizing failures, read and follow:
+
+<absolute-skill-dir>/references/failure-clustering.md
+
 Do not edit tracked files, change Git state, or commit. Run the complete selected
 procedure against the exact final Source SHA and stated app/platform scope. Build
 products, caches, screenshots, device artifacts, and logs are allowed. Return green

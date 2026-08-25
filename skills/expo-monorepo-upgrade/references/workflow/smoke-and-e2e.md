@@ -12,6 +12,10 @@ matching stage prompt below.
 ### Runtime observation
 
 ```markdown
+Before categorizing failures, read and follow:
+
+<absolute-skill-dir>/references/failure-clustering.md
+
 Do not edit tracked files, change Git state, or commit. Build products, caches,
 screenshots, device artifacts, and logs are allowed. Before running, require the
 working tree to match Source SHA plus Candidate diff when one is supplied. A pass

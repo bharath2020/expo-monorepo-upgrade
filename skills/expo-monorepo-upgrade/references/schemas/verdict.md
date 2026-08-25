@@ -33,6 +33,10 @@ accepts the result only after its schema and evidence bindings are valid.
   "clusters": [
     {
       "fingerprint": "link-expo-modules-core-missing-symbol",
+      "risk_tier": "high",
+      "risk_basis": "The missing native symbol prevents application startup.",
+      "grouping_basis": null,
+      "repair_targets": ["ios/Rainbow/AppDelegate.swift"],
       "summary": "ExpoModulesCore is missing a symbol required by the app target.",
       "failure_evidence": "The linker evidence is cited in findings.md.",
       "evidence_paths": ["reports/<run-id>/units/<unit-id>/attempt-1/dispatch-1/findings.md"]
@@ -69,6 +73,10 @@ accepts the result only after its schema and evidence bindings are valid.
 - `blocked` has a non-null blocker and may include already diagnosed clusters.
 - Fingerprints are stable lowercase slugs meaningful only within their literal app
   and optional platform scope.
+- Observation and authoritative-procedure agents categorize clusters through
+  [failure clustering](../failure-clustering.md). Every cluster records
+  `risk_tier`, `risk_basis`, `repair_targets`, and `grouping_basis`; the grouping
+  basis is `null` for one repair target and evidence-backed for multiple targets.
 
 ## Cluster dispatcher results
 
