@@ -4,10 +4,10 @@ Herdr is always the transport. This policy selects the interactive agent harness
 model, and reasoning effort that Herdr starts for each bounded role. Resolve the
 profile before rendering the brief; the worker never chooses its own profile.
 
-The launcher starts the main orchestrator as Codex using `gpt-5.6-sol` at `high`
-reasoning from the target repository's direct parent. Record that launcher profile
-before preflight. If it is absent or different, stop and ask the launcher to start
-the required session rather than inferring or changing the active session.
+The launcher starts the main orchestrator as Claude Code using `claude-opus-5` at
+`high` reasoning from the target repository's direct parent. Record that launcher
+profile before preflight. If it is absent or different, stop and ask the launcher
+to start the required session rather than inferring or changing the active session.
 
 ## Capability preflight
 
@@ -36,9 +36,9 @@ Use these exact defaults and fallbacks:
 
 | Profile id | Work | Preferred profile | Codex fallback |
 | --- | --- | --- | --- |
-| `main-orchestrator` | Main orchestrator | `codex / gpt-5.6-sol / high` | none; launcher requirement |
+| `main-orchestrator` | Main orchestrator | `claude / claude-opus-5 / high` | none; launcher requirement |
 | `preflight` | Preflight inspection | `codex / gpt-5.6-terra / medium` | none |
-| `cluster-dispatch` | Cluster dispatcher | `codex / gpt-5.6-terra / high` | none |
+| `cluster-dispatch` | Cluster dispatcher | `claude / claude-opus-5 / high` | none |
 | `bump` | Repository bump | `claude / claude-opus-5 / high` | `codex / gpt-5.6-sol / high` |
 | `observation` | Baseline, validation, smoke, full E2E, and authoritative rerun | `claude / claude-sonnet-5 / medium` | `codex / gpt-5.6-terra / medium` |
 | `repair-1` | Repair attempt 1 | `codex / gpt-5.6-sol / high` | none |
