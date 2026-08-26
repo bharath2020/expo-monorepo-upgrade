@@ -10,6 +10,14 @@ Before categorizing failures, read and follow:
 
 <absolute-skill-dir>/references/failure-clustering.md
 
+On failure in a normal run, require `Changelog reference status: ready`, then use
+read-only subagents to explore the downloaded files routed by `Changelog index`
+for the target SDK, scope, diagnostics, packages, and APIs. Require exact local
+paths and applicable facts or an explicit no-match, then reconcile the results
+yourself. Do not search for or download changelogs. A missing file or manifest-hash
+mismatch is blocked. In a `--test-run`, require `not_applicable_test_run`, skip
+changelog research, and record that literal; any other status is blocked.
+
 Do not edit tracked files, change Git state, or commit. Run the complete selected
 procedure against the exact final Source SHA and stated app/platform scope. Build
 products, caches, screenshots, device artifacts, and logs are allowed. Return green
@@ -19,10 +27,13 @@ decision, return blocked rather than red or green.
 
 Write `findings.md` with these exact sections:
 
-1. `Source binding` — Source SHA, app path, platform, and procedure reference.
+1. `Source binding` — Source SHA, target SDK, changelog manifest SHA-256 or
+   `not_applicable_test_run`, app path, platform, and procedure reference.
 2. `Execution` — commands or pipeline run, start/end times, exit status, and the
    outcome of every selected check.
-3. `Evidence` — repository-relative paths to logs and all produced artifacts.
+3. `Evidence` — repository-relative paths to logs and all produced artifacts plus
+   changelog Markdown paths used to categorize a failure, `not_required_green`, or
+   `not_applicable_test_run`.
 4. `Result` — one of: green with an empty cluster set; red with the complete
    scope-local cluster set; or blocked with the exact blocker and safe next action.
 

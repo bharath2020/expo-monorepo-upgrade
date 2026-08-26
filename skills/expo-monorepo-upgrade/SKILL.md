@@ -36,7 +36,10 @@ Before a run, read:
 - A missing optional YAML entry means no procedure exists for that scope.
 - Launch every child-agent session through Herdr. Do not silently fall back to
   native subagents or non-Herdr transport; an unavailable or incompatible Herdr
-  server blocks dispatch with its exact status evidence.
+  server blocks dispatch with its exact status evidence. An already dispatched
+  validation, repair, or review worker may use read-only subagents only to explore
+  the downloaded changelog files named in its brief. Those subagents own no
+  workflow unit, repository procedure, source edit, state write, or verdict.
 - Resolve every child harness, model, and effort from
   [harness and model selection](references/harness-and-model-selection.md) before
   rendering its brief. Never let inherited settings or an orchestrator's general
@@ -67,7 +70,10 @@ Before a run, read:
 
 ## Workflow
 
-When invoked with `--test-run`, follow every stage below except step 3 (Repository bump), and do not require bump success to finish.
+When invoked with `--test-run`, follow every stage below except steps 3 and 4
+(Repository bump and Changelog download), and do not require either result to
+finish. Mark changelog references `not_applicable_test_run` in every test-run
+brief.
 
 Run these stages in order, collapsing only procedures omitted by the contract:
 
@@ -77,16 +83,19 @@ Run these stages in order, collapsing only procedures omitted by the contract:
    validation before the bump so pre-existing failures remain attributable.
 3. [Repository bump](references/workflow/bump.md) — dispatch the repository-wide
    bump, then checkpoint its verified green candidate without repair review gates.
-4. [Validation and repair](references/workflow/validation-and-repair.md) — validate
+4. [Changelog download](references/workflow/changelog-download.md) — execute the
+   required root `changelogs` procedure once and record its verified local
+   directory for every later worker.
+5. [Validation and repair](references/workflow/validation-and-repair.md) — validate
    one app scope at a time, queue its complete cluster set, and delegate each queue
    head through one repair lifecycle and checkpoint.
-5. [Smoke and full E2E](references/workflow/smoke-and-e2e.md) — open eligible
+6. [Smoke and full E2E](references/workflow/smoke-and-e2e.md) — open eligible
    app/platform runtime lanes in order and route real failures through the same
    app-queue boundary.
-6. [Final verification](references/workflow/final-verification.md) — rerun every
+7. [Final verification](references/workflow/final-verification.md) — rerun every
    configured required procedure whose evidence must be current at the final
    checkpoint.
-7. [Reporting and close](references/reporting.md) — dispatch an agent to render the
+8. [Reporting and close](references/reporting.md) — dispatch an agent to render the
    evidence-backed report, then close the durable run with its returned result.
 
 For every dispatch and state transition, apply
@@ -98,8 +107,9 @@ owned only by the
 
 ## Finish
 
-Complete only when the bump succeeded, all configured final validations are
-green, every eligible smoke and full-E2E lane is green, all change reviews are
-closed, no evidence is stale, and the report artifacts exist. Otherwise finish
-`blocked` with exact scopes, evidence paths, last checkpoint, and next actions.
-Never push, publish, open a PR, or delete run artifacts unless the user asks.
+For a normal run, complete only when the bump succeeded, changelog references are
+`ready`, all configured final validations are green, every eligible smoke and
+full-E2E lane is green, all change reviews are closed, no evidence is stale, and
+the report artifacts exist. Otherwise finish `blocked` with exact scopes, evidence
+paths, last checkpoint, and next actions. Never push, publish, open a PR, or delete
+run artifacts unless the user asks.

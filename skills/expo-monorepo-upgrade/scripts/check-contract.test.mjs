@@ -8,6 +8,18 @@ import test from 'node:test';
 
 const script = join(dirname(fileURLToPath(import.meta.url)), 'check-contract.mjs');
 
+const changelogsProcedure = `changelogs:
+  description: "Download changelog references."
+  prompt: |
+    Target Expo SDK:
+    {{target_sdk}}
+    Additional changelog sources:
+    {{additional_changelog_sources}}
+    Changelog download directory:
+    {{changelog_output_dir}}
+    Download the applicable references.
+`;
+
 function validate(yaml, paths = []) {
   const root = mkdtempSync(join(tmpdir(), 'expo-upgrade-contract-'));
   try {
@@ -32,6 +44,7 @@ bump:
     Target SDK:
     {{target_sdk}}
     Run the approved repository bump.
+${changelogsProcedure}
 apps:
   - path: "apps/mobile"
     validation:
@@ -79,17 +92,20 @@ apps:
 
   assert.equal(result.status, 0, result.stderr);
   assert.equal(result.json.ok, true);
-  assert.equal(result.json.procedures.length, 8);
+  assert.equal(result.json.procedures.length, 9);
+  assert.equal(result.json.changelogs.kind, 'changelogs');
+  assert.equal(result.json.counts.changelogs, 1);
   assert.equal(result.json.apps[0].platforms.ios.full_e2e.kind, 'full_e2e');
 });
 
-test('allows an app covered only by the repository bump', () => {
+test('allows an app covered only by the root procedures', () => {
   const result = validate(`
 bump:
   description: "Upgrade the repository."
   prompt: |
     Target SDK:
     {{target_sdk}}
+${changelogsProcedure}
 apps:
   - path: "."
 `);
@@ -123,6 +139,7 @@ bump:
   prompt: |
     Target SDK:
     {{target_sdk}}
+${changelogsProcedure}
 apps:
   - path: "."
     validation:
@@ -148,6 +165,7 @@ bump:
   description: "Upgrade the repository."
   prompt: |
     Upgrade to {{target_sdk}} using {{package_manager}}.
+${changelogsProcedure}
 apps:
   - path: "."
 `);
@@ -164,6 +182,7 @@ bump:
   prompt: |
     Target SDK:
     {{target_sdk}}
+${changelogsProcedure}
 apps:
   - path: "../outside"
 `);
@@ -178,6 +197,7 @@ bump:
   description: "Upgrade the repository."
   prompt: |
     {{target_sdk}}
+${changelogsProcedure}
 apps:
   - path: "."
     validation: null
@@ -186,4 +206,68 @@ apps:
   assert.equal(result.status, 1);
   assert.match(result.json.errors.join('\n'), /must be omitted rather than set to null/);
   assert.match(result.json.errors.join('\n'), /must follow a label ending/);
+});
+
+test('requires the root changelogs procedure', () => {
+  const result = validate(`
+bump:
+  description: "Upgrade the repository."
+  prompt: |
+    Target SDK:
+    {{target_sdk}}
+apps:
+  - path: "."
+`);
+
+  assert.equal(result.status, 1);
+  assert.match(result.json.errors.join('\n'), /missing required `changelogs` procedure/);
+});
+
+test('rejects missing and inline changelog runtime inputs', () => {
+  const result = validate(`
+bump:
+  description: "Upgrade the repository."
+  prompt: |
+    Target SDK:
+    {{target_sdk}}
+changelogs:
+  description: "Download changelog references."
+  prompt: |
+    Target Expo SDK:
+    {{target_sdk}}
+    Additional changelog sources: {{additional_changelog_sources}}
+apps:
+  - path: "."
+`);
+
+  assert.equal(result.status, 1);
+  assert.match(result.json.errors.join('\n'), /changelog_output_dir/);
+  assert.match(result.json.errors.join('\n'), /must be on its own line/);
+});
+
+test('rejects unknown changelog runtime inputs', () => {
+  const result = validate(`
+bump:
+  description: "Upgrade the repository."
+  prompt: |
+    Target SDK:
+    {{target_sdk}}
+changelogs:
+  description: "Download changelog references."
+  prompt: |
+    Target Expo SDK:
+    {{target_sdk}}
+    Additional changelog sources:
+    {{additional_changelog_sources}}
+    Changelog download directory:
+    {{changelog_output_dir}}
+    Extra input:
+    {{package_manager}}
+apps:
+  - path: "."
+`);
+
+  assert.equal(result.status, 1);
+  assert.match(result.json.errors.join('\n'), /package_manager/);
+  assert.match(result.json.errors.join('\n'), /not allowed for changelogs/);
 });

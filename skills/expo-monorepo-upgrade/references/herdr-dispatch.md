@@ -4,6 +4,19 @@ Herdr is the mandatory transport for every child-agent session in a run. It owns
 terminal workspaces, panes, and live agent handles; it does not own workflow truth.
 Run state, rendered briefs, findings, and verdict files remain authoritative.
 
+Validation, repair, and review workers may use native read-only subagents only to
+explore downloaded changelog Markdown explicitly named in their briefs. These
+internal helpers receive no Herdr pane, run no repository procedure, mutate
+nothing, and return research only to the parent worker. They are not a fallback
+when Herdr dispatch is unavailable.
+
+After `state.changelog_references.status` becomes `ready`, start every later child
+agent with the recorded absolute changelog download directory as `--add-dir`, even
+when that worker's bounded role does not need to inspect it. The common brief tells
+the worker when and how it may use the files. Preflight, baseline, bump, the
+changelog procedure itself, and every `--test-run` worker omit this argument. A
+missing directory or manifest mismatch blocks launch.
+
 Run every shell command below through `rtk`. Read ids from Herdr's JSON responses;
 never infer them from labels or terminal layout.
 
@@ -107,7 +120,19 @@ durably record the complete brief before launching anything. Then:
    ```
 
    Run only the command matching the recorded harness. Never inherit a user model
-   or effort default.
+   or effort default. For the Codex-backed `changelogs` procedure only, append
+   `--search` after the harness separator. After changelog state is `ready`, use the
+   matching launch form below for every later child:
+
+   ```bash
+   rtk herdr agent start <agent-id> --kind codex --pane <child-pane-id> -- --model <exact-model-id> -c model_reasoning_effort=<effort> --add-dir <absolute-changelog-download-directory>
+   rtk herdr agent start <agent-id> --kind claude --pane <child-pane-id> -- --model <exact-model-id> --effort <effort> --add-dir <absolute-changelog-download-directory>
+   ```
+
+   Record the exact additional directory in `in_flight`. Codex grants that
+   additional directory write access, so the immutable brief and manifest hash
+   remain the enforcement boundary: later workers must not modify it. Preserve
+   the identical `--add-dir` argument on a transport redispatch.
 
 3. After startup reports interactive readiness, submit only the recorded brief
    path and wait for proof that the turn began:
@@ -117,8 +142,8 @@ durably record the complete brief before launching anything. Then:
    ```
 
 4. Record grid slot, workspace, pane, agent, harness, model, effort, profile
-   selection, brief, and verdict identities in `in_flight`, then advance
-   `next_slot` in row-first order.
+   selection, additional directories, brief, and verdict identities in
+   `in_flight`, then advance `next_slot` in row-first order.
    Wait on that same agent in bounded stretches with
    `rtk herdr agent wait <agent-id> --timeout <ms>`. On a timeout, record a
    heartbeat, confirm liveness with `rtk herdr agent get <agent-id>`, and continue

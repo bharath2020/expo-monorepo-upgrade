@@ -41,8 +41,10 @@ cluster at the top and orchestrates only that repair lifecycle.
   prompt. There is no fixed generic-worker subtype or operation catalog: the brief
   supplies exact inputs, allowed paths, and expected outputs. A generic worker
   makes no workflow decision and never exceeds that assignment.
-- **Procedure agent:** executes one YAML-backed bump, validation, repair, smoke, or
-  full-E2E prompt and returns evidence plus a verdict.
+- **Procedure agent:** executes one YAML-backed bump, changelogs, validation,
+  repair, smoke, or full-E2E prompt and returns evidence plus a verdict. The
+  changelog agent alone may search for and download changelogs, writes only its
+  assigned run directory, and produces no source candidate.
 - **General review agent:** performs exactly one assigned read-only code review or
   code-change-principles review. These two agents run only after a repair agent
   reports green.
@@ -83,6 +85,10 @@ Maximize safe read-only concurrency while enforcing:
 - `repo-write`: every bump, repair, or checkpoint agent; globally exclusive with
   other execution locks while active. Exactly one repository writer runs at a
   time.
+- `changelogs:<run-id>`: the single changelog procedure after the bump checkpoint;
+  it reads both checkpoint identities and writes only
+  `reports/<run-id>/changelogs` plus its assigned verdict directory. Post-bump
+  execution remains closed while this lock or its state write is unsettled.
 - `app:<path>`: app validation. The root path `.` conflicts with every app lock.
 - `app:<path>` plus `platform:<name>`: platform validation, smoke, and full E2E.
 - `repair-candidate:<cluster>`: reserves one uncommitted candidate and blocks every
@@ -106,7 +112,9 @@ The bump agent leaves a green repository-wide candidate uncommitted. No code
 review or code-change-principles review runs. The main orchestrator dispatches a
 general checkpoint agent only after the bump verdict and candidate identity are
 valid, then dispatches a generic worker to record the verified commit. It becomes
-the first checkpoint only after that bounded state assignment is green.
+the first checkpoint only after that bounded state assignment is green. The main
+orchestrator then runs the required root `changelogs` procedure and records its
+verified directory and manifest identity before opening post-bump validation.
 
 ### Repair
 
@@ -135,8 +143,9 @@ A blocked app/platform lane does not stop independent lanes. A failed bump,
 changed contract, dirty or mismatched shared checkout, or unsafe reconciliation is
 repository-wide.
 
-- `complete`: every configured required unit is green, stale evidence was
-  refreshed, all reviews are green, and reports exist.
+- `complete`: every configured required unit is green, changelog references are
+  `ready` for a normal run, stale evidence was refreshed, all reviews are green,
+  and reports exist.
 - `blocked`: at least one required scope cannot continue, the bump failed, an
   attempt cap was exhausted, or safe reconciliation is impossible.
 - `cancelled`: the user explicitly stopped the run; preserve state and evidence.

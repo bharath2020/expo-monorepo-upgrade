@@ -17,6 +17,10 @@ reports/<run-id>/
 ├── events.jsonl
 ├── journal.md
 ├── contract.snapshot.yaml
+├── changelogs/
+│   ├── index.md
+│   ├── manifest.json
+│   └── sources/*.md
 ├── prompts/<unit-id>/attempt-<n>/dispatch-<m>.md
 ├── candidates/<unit-or-cluster-id>/iteration-<n>/
 │   ├── candidate.patch
@@ -47,6 +51,7 @@ Use `schema_version: 1` and these top-level fields:
 | --- | --- |
 | `run_id`, `repository_root` | Stable run identity and absolute repository root |
 | `target_sdk` | Concrete target supplied by the user |
+| `changelog_references` | Status, exact download directory, target SDK, owner-supplied additional sources, source and bump checkpoints, index and manifest paths, manifest SHA-256, requested/final URLs, file hashes, and version coverage |
 | `source_sha`, `branch`, `checkpoint_sha` | Starting revision, upgrade branch, latest accepted commit |
 | `contract_path`, `contract_sha256`, `contract_snapshot` | Immutable contract identity |
 | `main_profile`, `harness_capabilities` | Required orchestrator profile plus preflighted Codex, Claude Code, Herdr, instruction, and skill compatibility evidence |
@@ -57,11 +62,35 @@ Use `schema_version: 1` and these top-level fields:
 | `cluster_dispatchers` | Dispatcher-id map of input queue head, selected cluster, status, heartbeat, and result path |
 | `active_candidate` | Sole uncommitted bump or repair candidate, owner, snapshot, hash, and files |
 | `locks` | Active resource lock to unit or dispatcher id |
-| `in_flight` | Active agent handle, harness, model, effort, profile selection, process evidence, heartbeat, brief, and verdict paths; completed assignments are removed after reconciliation |
+| `in_flight` | Active agent handle, harness, model, effort, profile selection, additional directories, process evidence, heartbeat, brief, and verdict paths; completed assignments are removed after reconciliation |
 | `herdr` | Workspace, tab, orchestrator pane, active-only two-row worker-grid pane ids, next row-first position, and historical closed pane ids |
 | `checkpoints` | Ordered verified commits and checkpoint-worker evidence |
 | `decisions`, `open_questions` | Durable human and orchestration decisions |
 | `started_at`, `updated_at` | UTC timestamps |
+
+For a normal run, initialize `changelog_references.status` as `pending`. After the
+green changelog verdict is independently reread, record this shape atomically:
+
+```json
+{
+  "status": "ready",
+  "directory": "reports/<run-id>/changelogs",
+  "target_sdk": "<target-sdk>",
+  "additional_sources": "none",
+  "source_sha": "<starting-source-sha>",
+  "bump_checkpoint_sha": "<verified-bump-checkpoint-sha>",
+  "index_path": "reports/<run-id>/changelogs/index.md",
+  "manifest_path": "reports/<run-id>/changelogs/manifest.json",
+  "manifest_sha256": "<sha256>",
+  "requested_and_final_sources": [],
+  "version_coverage": {},
+  "file_hashes": {}
+}
+```
+
+Use the literal recorded source list instead of `none` when supplied. A
+`--test-run` records `status: not_applicable_test_run` and no directory or file
+identity.
 
 A unit record contains:
 
@@ -126,6 +155,7 @@ Every JSONL event has `type` and UTC `at`. Use at least:
 - `dispatcher_started`, `dispatcher_heartbeat`, `dispatcher_result`,
   `dispatcher_retired`;
 - `repair_dispatched`, `candidate_created`, `candidate_revised`;
+- `changelogs_downloaded`, `changelog_reference_gap`;
 - `reviews_dispatched`, `review_verdict`, `candidate_validated`;
 - `checkpoint_dispatched`, `checkpoint_created`, `checkpoint_recovered`,
   `checkpoint_rejected`;
@@ -164,7 +194,13 @@ that apply.
    worker verdicts and dispatch a replacement bound to that selection. If no
    selection was recorded, dispatch the current ordered queue and require the
    replacement to select its head.
-8. Continue at the earliest unsettled prerequisite. Do not replay green work or
+8. For changelog state, re-read the recorded directory, manifest, and complete
+   file/hash map before any later dispatch. If a settled green changelog verdict
+   exists but its state write is missing, dispatch a fresh read-only recovery agent
+   to validate the exact request and checkpoint identity before recording it. An
+   absent, partial, conflicting, or changed directory blocks; never overwrite,
+   delete, merge, or redownload it during recovery.
+9. Continue at the earliest unsettled prerequisite. Do not replay green work or
    spend a repair attempt for an identical transport redispatch. Preserve its
    harness, model, and effort; resolve a new profile only for a new substantive
    attempt under the recorded policy.

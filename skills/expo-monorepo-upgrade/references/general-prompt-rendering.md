@@ -25,13 +25,22 @@ brief as a bounded control-plane task. There is no special renderer-worker subty
 4. Hash the completed base task as `base_prompt_sha256`.
 5. Resolve and record the dispatch profile through
    [harness and model selection](harness-and-model-selection.md).
-6. Append the common envelope below, then the one stage prompt supplied by the
+6. Read `target_sdk` and the active changelog-reference identity from run state.
+   For bootstrap preflight before state exists, use the immutable request target
+   and `pending`, or `not_applicable_test_run` when requested. Use `pending` before
+   the changelog procedure, `preparing` for that procedure, `ready` only after its
+   accepted identity is recorded, and `not_applicable_test_run` throughout
+   `--test-run`. A ready identity includes the recorded download directory, index,
+   manifest, manifest SHA-256, and complete file/hash map. Resolve its paths beneath
+   the recorded repository root, then verify and inject their absolute forms before
+   rendering every later brief.
+7. Append the common envelope below, then the one stage prompt supplied by the
    active workflow.
-7. Resolve `<absolute-skill-dir>` to the literal absolute skill directory before
+8. Resolve `<absolute-skill-dir>` to the literal absolute skill directory before
    writing and hashing the brief. Verify every mandatory instruction reference is
    an existing readable file, and reject the render if a reference remains
    unresolved.
-8. Write the complete brief to
+9. Write the complete brief to
    `reports/<run-id>/prompts/<unit-id>/attempt-<n>/dispatch-<m>.md`. Hash the full
    brief as `brief_sha256`, omitting only its own hash line, and store its path and
    both hashes in state before dispatch.
@@ -64,6 +73,12 @@ Append this block with literal values:
 - Profile evidence:
   <repository-relative-capability-or-decision-evidence-paths-or-none-for-bootstrap-preflight>
 - Repository root: <absolute-repo-root>
+- Target SDK: <target-sdk>
+- Changelog reference status: <pending-or-preparing-or-ready-or-not_applicable_test_run>
+- Changelog download directory: <absolute-run-changelogs-path-or-pending-or-not_applicable_test_run>
+- Changelog index: <absolute-markdown-index-path-or-pending-or-not_applicable_test_run>
+- Changelog manifest: <absolute-manifest-path-or-pending-or-not_applicable_test_run>
+- Changelog manifest SHA-256: <sha256-or-pending-or-not_applicable_test_run>
 - App path: <repo-relative-path-or-null>
 - Platform: <platform-or-null>
 - Procedure attempt: <n>/<cap>
@@ -92,6 +107,15 @@ and exact failure points under the supplied dispatch directory. Keep working and
 poll the process you started until it finishes or the deadline expires; never start
 a duplicate because an initial wait yielded.
 
+When `Changelog reference status` is `ready`, refer to the downloaded changelog
+files in `Changelog download directory` for SDK, dependency, API, build-tool, or
+migration information relevant to this task. Start with `index.md`,
+verify `manifest.json` against the supplied SHA-256, and cite every exact local
+Markdown path used. Do not search for, download, replace, or modify changelog
+files. Only the `changelogs` procedure with status `preparing` may search for and
+download them. A `pending` or `not_applicable_test_run` status provides no
+changelog authority or reference material.
+
 Write findings and a verdict matching <skill-dir>/references/schemas/verdict.md
 before returning. Return the verdict JSON alone after the file exists.
 ```
@@ -101,6 +125,13 @@ before returning. Return the verdict JSON alone after the file exists.
 `validation`, `smoke`, and `full_e2e`, YAML runtime inputs remain empty, while
 `Procedure`, `App path`, and optional `Platform` in the envelope are mandatory
 orchestration metadata.
+
+Changelog fields are `pending` for preflight, baseline, bump, bump checkpoint, and
+pre-download recovery; the changelog procedure uses `preparing` with its assigned
+output directory and pending index/manifest identity. After the download result is
+recorded, every field is `ready`; a missing file or hash mismatch blocks rendering
+rather than reopening web research. Every `--test-run` brief uses
+`not_applicable_test_run` and omits changelog directory access.
 
 Harness, model, effort, selection reason, and profile evidence are immutable
 dispatch identity. Preserve them for an identical transport redispatch. A fresh

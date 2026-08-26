@@ -47,7 +47,9 @@ That agent mechanically verifies the candidate, stages only its declared files,
 creates the repository-wide bump commit with required trailers, verifies it, and
 returns a checkpoint verdict. The main orchestrator then dispatches a general
 worker to record the verified commit; only that worker's green verdict establishes
-the first source checkpoint and opens post-bump validation.
+the first source checkpoint and opens the required root `changelogs` procedure.
+Post-bump validation remains closed until the changelog directory and manifest
+identity are independently verified and recorded.
 
 There is no bump-repair procedure. A red, blocked, malformed, unverifiable, or
 unsafe-to-commit bump blocks every lane. Never improvise a manual Expo upgrade.

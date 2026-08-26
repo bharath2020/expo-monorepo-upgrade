@@ -34,6 +34,10 @@ For either assignment, fill this skill-defined base task with immutable values:
 - Original repair unit: <unit-id>
 - Original procedure: <procedure-ref>
 - Starting checkpoint: <source-sha>
+- Target SDK: <target-sdk>
+- Changelog index: <absolute-markdown-index-path-or-not_applicable_test_run>
+- Changelog manifest: <absolute-manifest-path-or-not_applicable_test_run>
+- Changelog manifest SHA-256: <sha256-or-not_applicable_test_run>
 - Candidate snapshot: <immutable-candidate-directory>
 - Candidate diff SHA-256: <sha256>
 - Candidate author harness: <codex-or-claude>
@@ -56,16 +60,33 @@ Pass the completed base task through
 
 ```markdown
 Read only the supplied immutable candidate diff, rendered change prompt, findings,
-validation evidence, and recorded decisions. Verify its SHA-256 before review. Do
-not edit files, change Git state, run a repository procedure, or commit. Perform
-only the assigned code or code-change-principles review. Write each required change
-as a scope-local review comment with exact diff evidence; otherwise return green.
+validation evidence, recorded decisions, and any ready downloaded changelog files.
+Verify the candidate and, when ready, changelog-manifest SHA-256 values before
+review. Do not edit files, change Git state, run a repository procedure, or commit.
+
+In a normal run, require `Changelog reference status: ready`, then independently
+use read-only subagents to explore the files routed by `Changelog index` for the
+target SDK, cluster, platform, packages, APIs, and candidate changes. Require exact
+local paths and applicable facts or an explicit no-match, then reconcile the
+results yourself with the candidate and validation evidence. Do not give a
+subagent the other reviewer's output or let it search for other changelogs. A
+missing file or manifest-hash mismatch is blocked. In a `--test-run`, require
+`not_applicable_test_run`, skip changelog research, and record that literal;
+any other status is blocked.
+
+Perform only the assigned code or code-change-principles review. Changelog context
+does not substitute for candidate evidence or the assigned principles. Write each
+required change as a scope-local review comment with exact diff evidence; otherwise
+return green.
 
 Write `findings.md` with these exact sections:
 
-1. `Candidate binding` — review kind, Source SHA, candidate diff SHA-256, app
-   scope, procedure, and cluster.
-2. `Review performed` — checks applied and evidence inspected.
+1. `Candidate binding` — review kind, Source SHA, candidate diff SHA-256, target
+   SDK, changelog manifest SHA-256 or `not_applicable_test_run`, app scope,
+   procedure, and cluster.
+2. `Review performed` — checks applied, evidence inspected, subagents used, and
+   exact changelog paths with applicable facts, explicit no-match, or
+   `not_applicable_test_run`.
 3. `Required changes` — every scope-local comment with exact diff evidence, or
    `none`.
 4. `Result` — green when no change is required; red with the complete required

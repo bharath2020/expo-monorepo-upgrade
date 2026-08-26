@@ -170,6 +170,7 @@ function rejectExplicitNulls(value, keys, where) {
 
 const INPUTS = {
   bump: ['target_sdk'],
+  changelogs: ['target_sdk', 'additional_changelog_sources', 'changelog_output_dir'],
   validation: [],
   repair_validation: ['cluster_summary', 'failure_evidence'],
   smoke: [],
@@ -289,7 +290,7 @@ function checkCompanion(container, procedure, repair, where) {
   }
 }
 
-function finish(apps, bump) {
+function finish(apps, bump, changelogs) {
   const ok = errors.length === 0;
   const byKind = Object.fromEntries(Object.keys(INPUTS).map(kind => [
     kind,
@@ -303,6 +304,7 @@ function finish(apps, bump) {
     warnings,
     summary: `${apps.length} app(s), ${procedures.length} procedure(s), ${errors.length} error(s), ${warnings.length} warning(s)`,
     bump,
+    changelogs,
     apps,
     procedures,
     counts: byKind,
@@ -313,19 +315,28 @@ function finish(apps, bump) {
 
 if (!existsSync(contractPath)) {
   error('expo-upgrade.yaml', 'missing at repository root; run expo-upgrade-setup');
-  finish([], null);
+  finish([], null, null);
 } else {
   const document = readContract();
   const apps = [];
   let bump = null;
+  let changelogs = null;
   if (!isMap(document)) {
     if (document !== null) error('expo-upgrade.yaml', 'root must be a map');
   } else {
-    exactKeys(document, ['bump', 'apps'], 'expo-upgrade.yaml');
+    exactKeys(document, ['bump', 'changelogs', 'apps'], 'expo-upgrade.yaml');
     if (document.bump == null) {
       error('expo-upgrade.yaml', 'missing required `bump` procedure');
     } else {
       bump = checkProcedure(document.bump, 'bump', 'bump', {
+        app_path: null,
+        platform: null,
+      });
+    }
+    if (document.changelogs == null) {
+      error('expo-upgrade.yaml', 'missing required `changelogs` procedure');
+    } else {
+      changelogs = checkProcedure(document.changelogs, 'changelogs', 'changelogs', {
         app_path: null,
         platform: null,
       });
@@ -411,11 +422,11 @@ if (!existsSync(contractPath)) {
           }
         }
         if (normalized.validation == null && Object.keys(normalized.platforms).length === 0) {
-          warning(where, 'app has no configured validation or platform procedure; only the repository bump covers it');
+          warning(where, 'app has no configured validation or platform procedure; only the root bump and changelogs procedures cover it');
         }
         apps.push(normalized);
       });
     }
   }
-  finish(apps, bump);
+  finish(apps, bump, changelogs);
 }

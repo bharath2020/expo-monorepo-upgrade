@@ -103,6 +103,17 @@ rerun, all bound to the same candidate identity.
 Observation agents do not edit tracked files or Git. When bound to a candidate,
 their input hash identifies the exact uncommitted diff they observed.
 
+A changelog procedure agent uses procedure reference `changelogs` and stage
+`changelog_download`. It reports only `green` or `blocked`, never `red`; has an
+empty cluster set and no source changes or candidate; and leaves both source SHA
+fields equal to the verified bump checkpoint. Its `result` binds the target SDK,
+owner-supplied additional sources, starting source checkpoint, bump checkpoint,
+exact `reports/<run-id>/changelogs` directory, index, manifest and manifest
+SHA-256, requested and final sources, version coverage, and complete file/hash
+map. Green requires every recorded path and hash to validate. Missing coverage,
+an invalid source, or a conflicting existing directory is blocked and cannot open
+post-bump validation.
+
 A green bump agent has a non-empty file list, no commit SHA, an immutable candidate
 snapshot and hash, and equal source SHA fields. It leaves the candidate uncommitted.
 

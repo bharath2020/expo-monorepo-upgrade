@@ -59,6 +59,11 @@ Use these top-level sections:
   platform procedure;
 - `baseline`: every configured validation result and its evidence, including
   pre-existing and blocked clusters;
+- `changelogs`: reference status, exact download directory, target SDK,
+  owner-supplied additional sources, source and bump checkpoints, requested and
+  final URLs, version coverage, index and manifest paths, manifest SHA-256,
+  complete file hashes, reference gaps, and downstream units that cited local
+  Markdown;
 - `procedures`: every unit with stage, procedure reference, status, attempt counts,
   source SHA, resolved harness/model/effort and selection reason, duration, hashes,
   prompt/verdict paths, and evidence;
@@ -91,11 +96,12 @@ downstream procedure that could not open is `ineligible` with its prerequisite.
 Write a concise handoff:
 
 1. source SDK, target SDK, branch, final checkpoint, and terminal status;
-2. one line per app/platform lane with validation, smoke, and full-E2E outcomes;
-3. fixed clusters and their verified checkpoint commits;
-4. pre-existing failures, flakes, and blocked clusters;
-5. evidence and report paths;
-6. the exact next action for each blocker.
+2. changelog status, download directory, manifest SHA-256, coverage, and any gap;
+3. one line per app/platform lane with validation, smoke, and full-E2E outcomes;
+4. fixed clusters and their verified checkpoint commits;
+5. pre-existing failures, flakes, and blocked clusters;
+6. evidence and report paths;
+7. the exact next action for each blocker.
 
 End with exactly one banner:
 

@@ -68,9 +68,10 @@ JSON alone.
    directory. Never stash, discard, or commit user work as a convenience.
 5. The main orchestrator dispatches a fresh generic worker to record source and
    contract identities, create state, and copy the accepted YAML to
-   `contract.snapshot.yaml`. Record the required main profile and returned harness
-   capabilities at the same time. All procedures for this run come from that
-   snapshot.
+   `contract.snapshot.yaml`. Record the required main profile, returned harness
+   capabilities, and changelog-reference status at the same time: `pending` for a
+   normal run or `not_applicable_test_run` for `--test-run`. All procedures for
+   this run come from that snapshot.
 
 If a prior run's contract hash differs from current YAML, block the old run. Treat
 the current YAML as a fresh contract and start a new run only; never update or

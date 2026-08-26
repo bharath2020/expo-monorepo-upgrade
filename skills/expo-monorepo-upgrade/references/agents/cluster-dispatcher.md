@@ -20,6 +20,8 @@ The main orchestrator supplies:
 - the matching repair procedure reference, the complete original validation,
   smoke, or full-E2E procedure reference that discovered it, and their owning
   workflow stage-prompt references;
+- the target SDK and downloaded changelog directory, index, manifest, and manifest
+  SHA-256;
 - the current checkpoint and exact attempt budget;
 - immutable prompt, candidate, review, verdict, evidence, and state paths;
 - the immutable harness/model policy, current capability evidence, and candidate
@@ -41,7 +43,7 @@ run-state mutation it needs; the dispatcher itself remains a decision role.
    [harness and model selection](../harness-and-model-selection.md), then dispatch
    one repair agent with the matching `repair_validation` or
    `repair_smoke_e2e` procedure and the repair stage prompt from its owning
-   workflow.
+   workflow. Bind the supplied changelog references into that brief.
 2. While the repair is running, or when its verdict is red, blocked, malformed, or
    missing, do not dispatch either reviewer. On a retryable red result, decide
    whether the attempt budget permits another repair agent. Otherwise return the
@@ -51,7 +53,7 @@ run-state mutation it needs; the dispatcher itself remains a decision role.
    `audit.code-review` and `audit.code-change-principles`.
    Select their profiles from the candidate author's model family so code review
    uses the opposite family when Claude is eligible. Render both through the stage prompt in
-   [change review](../workflow/audit.md).
+   [change review](../workflow/audit.md), bound to the same changelog references.
 4. If either reviewer returns required changes, collect both verdicts and dispatch
    a new repair-agent iteration for this same cluster with all review feedback.
    Any changed candidate invalidates both reviews. Wait for that repair agent to
