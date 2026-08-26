@@ -25,14 +25,16 @@ brief as a bounded control-plane task. There is no special renderer-worker subty
 4. Hash the completed base task as `base_prompt_sha256`.
 5. Resolve and record the dispatch profile through
    [harness and model selection](harness-and-model-selection.md).
-6. Read `target_sdk` and the active changelog-reference identity from run state.
-   For bootstrap preflight before state exists, use the immutable request target
-   and `pending`, or `not_applicable_test_run` when requested. Use `pending` before
-   the changelog procedure, `preparing` for that procedure, `ready` only after its
-   accepted identity is recorded, and `not_applicable_test_run` throughout
-   `--test-run`. A ready identity includes the recorded download directory, index,
-   manifest, manifest SHA-256, and complete file/hash map. Resolve its paths beneath
-   the recorded repository root, then verify and inject their absolute forms before
+6. Read `source_sdk`, `target_sdk`, and the active changelog-reference identity
+   from run state. For bootstrap preflight before state exists, use `pending` for
+   the source SDK, the immutable request target, and `pending`, or
+   `not_applicable_test_run` when requested. Reject every post-preflight render
+   when either SDK is missing or unresolved. Use `pending` before the changelog
+   procedure, `preparing` for that procedure, `ready` only after its accepted
+   identity is recorded, and `not_applicable_test_run` throughout `--test-run`. A
+   ready identity includes the recorded download directory, index, manifest,
+   manifest SHA-256, and complete file/hash map. Resolve its paths beneath the
+   recorded repository root, then verify and inject their absolute forms before
    rendering every later brief.
 7. Append the common envelope below, then the one stage prompt supplied by the
    active workflow.
@@ -73,7 +75,9 @@ Append this block with literal values:
 - Profile evidence:
   <repository-relative-capability-or-decision-evidence-paths-or-none-for-bootstrap-preflight>
 - Repository root: <absolute-repo-root>
+- Source Expo SDK: <source-sdk-or-pending-for-bootstrap-preflight>
 - Target SDK: <target-sdk>
+- Expo SDK migration: <source-sdk-or-pending-for-bootstrap-preflight> -> <target-sdk>
 - Changelog reference status: <pending-or-preparing-or-ready-or-not_applicable_test_run>
 - Changelog download directory: <absolute-run-changelogs-path-or-pending-or-not_applicable_test_run>
 - Changelog index: <absolute-markdown-index-path-or-pending-or-not_applicable_test_run>

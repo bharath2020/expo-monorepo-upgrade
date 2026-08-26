@@ -115,7 +115,10 @@ an invalid source, or a conflicting existing directory is blocked and cannot ope
 post-bump validation.
 
 A green bump agent has a non-empty file list, no commit SHA, an immutable candidate
-snapshot and hash, and equal source SHA fields. It leaves the candidate uncommitted.
+snapshot and hash, and equal source SHA fields. Its `result` records
+`source_sdk_before`, `target_sdk_requested`, and `target_sdk_after`; the first two
+match the brief's source and target SDK context, and the last equals the requested
+target. It leaves the candidate uncommitted.
 
 A green repair agent has the same change shape: non-empty files, no commit SHA,
 snapshot and hash, and equal source SHA fields. A red repair restores only its own

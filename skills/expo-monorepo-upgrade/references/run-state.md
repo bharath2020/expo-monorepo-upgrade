@@ -50,8 +50,8 @@ Use `schema_version: 1` and these top-level fields:
 | Field | Meaning |
 | --- | --- |
 | `run_id`, `repository_root` | Stable run identity and absolute repository root |
-| `target_sdk` | Concrete target supplied by the user |
-| `changelog_references` | Status, exact download directory, target SDK, owner-supplied additional sources, source and bump checkpoints, index and manifest paths, manifest SHA-256, requested/final URLs, file hashes, and version coverage |
+| `source_sdk`, `target_sdk` | Concrete source resolved before the bump and concrete target supplied by the user |
+| `changelog_references` | Status, exact download directory, source and target SDKs, owner-supplied additional sources, source and bump checkpoints, index and manifest paths, manifest SHA-256, requested/final URLs, file hashes, and version coverage |
 | `source_sha`, `branch`, `checkpoint_sha` | Starting revision, upgrade branch, latest accepted commit |
 | `contract_path`, `contract_sha256`, `contract_snapshot` | Immutable contract identity |
 | `main_profile`, `harness_capabilities` | Required orchestrator profile plus preflighted Codex, Claude Code, Herdr, instruction, and skill compatibility evidence |
@@ -75,6 +75,7 @@ green changelog verdict is independently reread, record this shape atomically:
 {
   "status": "ready",
   "directory": "reports/<run-id>/changelogs",
+  "source_sdk": "<source-sdk>",
   "target_sdk": "<target-sdk>",
   "additional_sources": "none",
   "source_sha": "<starting-source-sha>",

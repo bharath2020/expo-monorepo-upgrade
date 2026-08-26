@@ -20,8 +20,8 @@ The main orchestrator supplies:
 - the matching repair procedure reference, the complete original validation,
   smoke, or full-E2E procedure reference that discovered it, and their owning
   workflow stage-prompt references;
-- the target SDK and downloaded changelog directory, index, manifest, and manifest
-  SHA-256;
+- the source and target SDKs and downloaded changelog directory, index, manifest,
+  and manifest SHA-256;
 - the current checkpoint and exact attempt budget;
 - immutable prompt, candidate, review, verdict, evidence, and state paths;
 - the immutable harness/model policy, current capability evidence, and candidate

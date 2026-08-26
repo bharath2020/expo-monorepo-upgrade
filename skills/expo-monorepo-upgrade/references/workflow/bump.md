@@ -8,28 +8,38 @@ below, and dispatches one repository-wide bump agent.
 ## Appended stage prompt
 
 ```markdown
-Create or reuse branch upgrade/sdk-<target> at Starting checkpoint, then execute the
-bump prompt across the repository. Do not include reports/<run-id> in the source
-candidate and do not edit expo-upgrade.yaml. Do not stage or commit. On a passing
-result, leave only the bump candidate uncommitted, snapshot its tracked and
-candidate-owned untracked files, report every file and the diff SHA-256, and return
-green. On failure, save patch and evidence, then restore only changes owned by this
-attempt to Starting checkpoint. If exact restoration is not provably safe, return
-blocked without destructive cleanup.
+1. Create or reuse branch upgrade/sdk-<target> at Starting checkpoint.
+2. Before editing, resolve the repository's Expo SDK from its dependency metadata
+   and require it to match Source Expo SDK in the orchestration context.
+3. Execute the bump prompt across the repository. Do not include reports/<run-id>
+   in the source candidate, edit expo-upgrade.yaml, stage, or commit.
+4. After the bump, resolve the repository's Expo SDK again and require it to match
+   Target SDK.
+5. On a passing result, leave only the bump candidate uncommitted, snapshot its
+   tracked and candidate-owned untracked files, report every file and the diff
+   SHA-256, and return green.
+6. On failure, save patch and evidence, then restore only changes owned by this
+   attempt to Starting checkpoint. If exact restoration is not provably safe,
+   return blocked without destructive cleanup.
 
 Write `findings.md` with these exact sections:
 
-1. `Source binding` — Starting checkpoint, target SDK, and branch.
-2. `Execution` — bump actions, checks, timing, and exact failure point if any.
+1. `Source binding` — Starting checkpoint, source Expo SDK, target SDK, explicit
+   source-to-target migration, dependency evidence, and branch.
+2. `Execution` — bump actions, post-bump Expo SDK dependency evidence, checks,
+   timing, and exact failure point if any.
 3. `Candidate` — changed files, snapshot path, diff SHA-256, or restored-state
    evidence when no candidate is accepted.
 4. `Evidence` — repository-relative patch, log, and check-artifact paths.
 5. `Result` — green with the accepted candidate identity; red only after proven
    restoration; or blocked with the exact blocker and safe next action.
 
-Then write `verdict.json` in the supplied verdict shape. On green, make `changes`
-match the candidate file list, snapshot, and diff hash exactly; on red or blocked,
-match the restoration evidence and blocker in `findings.md`. Return that JSON alone.
+Then write `verdict.json` in the supplied verdict shape. Put `source_sdk_before`,
+`target_sdk_requested`, and `target_sdk_after` in `result`. On green, require the
+before/requested/after values to prove the supplied source-to-target migration and
+make `changes` match the candidate file list, snapshot, and diff hash exactly. On
+red or blocked, match the SDK evidence, restoration evidence, and blocker in
+`findings.md`. Return that JSON alone.
 ```
 
 As part of this single bump-stage prompt, append
